@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GPS Traverse">
+<meta name="theme-color" content="#151824">
+<title>GPS Traverse Calculator</title>
+<style>
+/* ── Reset ────────────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#151824;--surface:#1e2438;--surface2:#252d45;
+  --border:#2e3a58;--border2:#3a4a6a;
+  --text:#dce4f0;--sub:#7a8aaa;
+  --amber:#d4860a;--amber-dim:#8a5206;
+  --green:#2ecc71;--green-dim:#1a7a43;
+  --red:#e74c3c;--yellow:#f39c12;--blue:#4a90c0;
+  --mono:"Consolas","Menlo","Courier New",monospace;
+  --ui:system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:6px;--safe-bot:env(safe-area-inset-bottom,0px);
+}
+html{font-size:15px}
+body{font-family:var(--ui);background:var(--bg);color:var(--text);
+     min-height:100dvh;padding-bottom:var(--safe-bot);line-height:1.5}
+button,select,input{font-family:inherit;font-size:1rem}
+input[type=number]{-moz-appearance:textfield}
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+header{background:var(--surface);border-bottom:2px solid var(--amber);
+       padding:12px 16px 10px;position:sticky;top:0;z-index:100;
+       display:flex;align-items:baseline;gap:12px}
+header h1{font-size:1.05rem;font-weight:700;letter-spacing:.03em}
+header span{font-size:.75rem;color:var(--sub);letter-spacing:.05em}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+.tabs{display:flex;overflow-x:auto;scrollbar-width:none;
+      border-bottom:1px solid var(--border);background:var(--surface);
+      position:sticky;top:49px;z-index:99}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;padding:11px 18px;font-size:.82rem;font-weight:600;
+     letter-spacing:.04em;color:var(--sub);background:transparent;border:none;
+     border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;
+     transition:color .15s,border-color .15s;-webkit-tap-highlight-color:transparent}
+.tab.active{color:var(--amber);border-bottom-color:var(--amber)}
+
+/* ── Panels ───────────────────────────────────────────────────────────────── */
+.panel{display:none;padding:16px;max-width:680px;margin:0 auto}
+.panel.active{display:block}
+
+/* ── Section heads ────────────────────────────────────────────────────────── */
+.sh{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--blue);margin:20px 0 8px;display:flex;align-items:center;gap:8px}
+.sh::after{content:"";flex:1;height:1px;background:var(--border)}
+.sh:first-child{margin-top:4px}
+
+/* ── Mode toggle ──────────────────────────────────────────────────────────── */
+.mode-toggle{display:grid;grid-template-columns:1fr 1fr;gap:2px;
+             background:var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:4px}
+.mode-btn{padding:11px 8px;text-align:center;font-size:.85rem;font-weight:600;
+          background:var(--surface2);color:var(--sub);border:none;cursor:pointer;
+          transition:background .15s,color .15s;-webkit-tap-highlight-color:transparent}
+.mode-btn.active{background:var(--amber-dim);color:var(--amber)}
+
+/* ── Fields ───────────────────────────────────────────────────────────────── */
+.field{margin-bottom:10px}
+.field label{display:block;font-size:.78rem;font-weight:600;color:var(--sub);
+             letter-spacing:.04em;margin-bottom:4px}
+.field label span{color:var(--sub);font-weight:400;margin-left:4px}
+.field input,.field select{width:100%;padding:11px 12px;background:var(--surface2);
+  color:var(--text);border:1px solid var(--border);border-radius:var(--r);
+  font-family:var(--mono);font-size:.95rem;outline:none;
+  transition:border-color .15s;-webkit-appearance:none}
+.field input:focus,.field select:focus{border-color:var(--blue)}
+.field select{cursor:pointer}
+.field select option{background:var(--surface2)}
+.hint{font-size:.73rem;color:var(--sub);margin-top:3px}
+.hint.ok{color:var(--green)}.hint.warn{color:var(--yellow)}.hint.err{color:var(--red)}
+
+/* ── Two-column grid ──────────────────────────────────────────────────────── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+
+/* ── Live display ─────────────────────────────────────────────────────────── */
+#live-bearing{font-size:.8rem;color:var(--green);font-family:var(--mono);
+              margin:2px 0 10px 2px;min-height:1.2em}
+
+/* ── Radio pill buttons ───────────────────────────────────────────────────── */
+.rb-group{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.rb-group input[type=radio]{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.rb-group label{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:9px 14px;font-size:.82rem;font-weight:600;
+  background:var(--surface2);color:var(--sub);
+  border:1.5px solid var(--border);border-radius:20px;
+  cursor:pointer;user-select:none;white-space:nowrap;
+  transition:background .15s,color .15s,border-color .15s;
+  -webkit-tap-highlight-color:transparent}
+.rb-group label:hover{border-color:var(--border2);color:var(--text)}
+.rb-group input[type=radio]:checked + label{
+  background:var(--amber-dim);color:var(--amber);border-color:var(--amber)}
+.rb-group.green input[type=radio]:checked + label{
+  background:var(--green-dim);color:var(--green);border-color:var(--green)}
+
+/* ── Calculate button ─────────────────────────────────────────────────────── */
+.calc-btn{width:100%;padding:15px;background:var(--green-dim);color:var(--green);
+          border:1px solid var(--green);border-radius:var(--r);font-size:1rem;
+          font-weight:700;letter-spacing:.05em;cursor:pointer;margin-top:18px;
+          transition:background .15s;-webkit-tap-highlight-color:transparent}
+.calc-btn:active{background:var(--green);color:#0a2010}
+
+/* ── Results tables ───────────────────────────────────────────────────────── */
+.rtable{width:100%;border-collapse:collapse;font-family:var(--mono);
+        font-size:.82rem;margin-top:4px}
+.rtable th{text-align:left;padding:7px 8px;color:var(--blue);font-size:.7rem;
+           font-weight:700;letter-spacing:.06em;border-bottom:1px solid var(--border2);
+           background:var(--surface)}
+.rtable td{padding:8px;border-bottom:1px solid var(--border)}
+.rtable tr:last-child td{border-bottom:none}
+.rtable td.r{text-align:right}
+.rtable .p1 td:first-child{color:var(--red);font-weight:700}
+.rtable :not(.p1) td:first-child{color:var(--blue)}
+.pass{color:var(--green);font-weight:700}
+.marg{color:var(--yellow);font-weight:700}
+.fail{color:var(--red);font-weight:700}
+.row-pass{background:rgba(46,204,113,.04)}
+.row-marg{background:rgba(243,156,18,.06)}
+.row-fail{background:rgba(231,76,60,.06)}
+
+/* ── Closure box ──────────────────────────────────────────────────────────── */
+.cbox{border-radius:var(--r);padding:14px;margin-top:10px;border:1px solid var(--border2)}
+.cbox .cl{font-size:.7rem;font-weight:700;letter-spacing:.08em;
+          text-transform:uppercase;color:var(--sub);margin-bottom:6px}
+.cbox .cv{font-family:var(--mono);font-size:1.3rem;font-weight:700}
+.cbox .cn{font-size:.75rem;color:var(--sub);margin-top:4px}
+.cbox.ok{background:rgba(46,204,113,.06);border-color:var(--green)}.cbox.ok .cv{color:var(--green)}
+.cbox.mg{background:rgba(243,156,18,.06);border-color:var(--yellow)}.cbox.mg .cv{color:var(--yellow)}
+.cbox.fl{background:rgba(231,76,60,.06);border-color:var(--red)}.cbox.fl .cv{color:var(--red)}
+
+/* ── Bearings list ────────────────────────────────────────────────────────── */
+.blist{list-style:none;margin-top:4px}
+.blist li{display:flex;justify-content:space-between;align-items:baseline;
+          padding:9px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.blist li:last-child{border-bottom:none}
+.blist .lbl{color:var(--sub);font-size:.8rem}
+.blist .val{font-family:var(--mono);font-weight:600}
+
+/* ── Canvas ───────────────────────────────────────────────────────────────── */
+#plan-canvas{width:100%;aspect-ratio:1/1;max-height:60vw;background:#0c1020;
+             border-radius:var(--r);border:1px solid var(--border);display:block;
+             margin-top:4px;touch-action:none}
+
+/* ── Export ───────────────────────────────────────────────────────────────── */
+.exp-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.exp-btn{padding:13px 10px;text-align:center;background:var(--surface2);color:var(--text);
+         border:1px solid var(--border);border-radius:var(--r);font-size:.82rem;
+         font-weight:600;cursor:pointer;transition:border-color .15s;
+         -webkit-tap-highlight-color:transparent}
+.exp-btn:active{border-color:var(--blue)}
+.exp-btn.primary{background:rgba(74,144,192,.15);border-color:var(--blue);color:var(--blue)}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.empty{text-align:center;padding:48px 16px;color:var(--sub);
+       font-size:.85rem;line-height:1.8}
+.empty .icon{font-size:2.5rem;display:block;margin-bottom:12px;opacity:.4}
+
+/* ── Warn banner ──────────────────────────────────────────────────────────── */
+.warn-banner{font-size:.8rem;color:var(--yellow);background:rgba(243,156,18,.08);
+             border:1px solid var(--yellow);border-radius:var(--r);
+             padding:10px 12px;margin-bottom:10px;line-height:1.6}
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+#toast{position:fixed;bottom:calc(20px + var(--safe-bot));left:50%;
+       transform:translateX(-50%) translateY(80px);background:var(--surface2);
+       border:1px solid var(--green);color:var(--green);padding:10px 20px;
+       border-radius:20px;font-size:.85rem;font-weight:600;
+       transition:transform .25s ease,opacity .25s ease;
+       opacity:0;pointer-events:none;z-index:999;white-space:nowrap}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media(min-width:600px){
+  .panel{padding:20px 24px}
+  .exp-row{grid-template-columns:repeat(3,1fr)}
+  #plan-canvas{max-height:420px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>GPS Traverse Calculator</h1>
+  <span>GDA2020 / MGA2020</span>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-panel="input">Inputs</button>
+  <button class="tab" data-panel="coords">Coordinates</button>
+  <button class="tab" data-panel="qc">QC Checks</button>
+  <button class="tab" data-panel="bearings">Bearings</button>
+  <button class="tab" data-panel="plan">Site Plan</button>
+  <button class="tab" data-panel="export">Export</button>
+</nav>
+
+<!-- ── INPUTS ─────────────────────────────────────────────────────────────── -->
+<section class="panel active" id="panel-input">
+
+  <div class="sh">Survey Mode</div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btn-tri"  onclick="setMode('tri')">▲  Triangle (3 pts)</button>
+    <button class="mode-btn"        id="btn-quad" onclick="setMode('quad')">▪  Quadrilateral (4 pts)</button>
+  </div>
+  <div style="font-size:.78rem;color:var(--sub);margin:4px 0 8px 2px" id="mode-desc"></div>
+
+  <!-- ── P1 GPS anchor ── -->
+  <div class="sh">P1 — GPS Anchor</div>
+  <div class="grid2">
+    <div class="field"><label>Easting (m) <span>MGA2020</span></label>
+      <input type="number" id="e1" value="394820.470" step=".001" inputmode="decimal"></div>
+    <div class="field"><label>Northing (m)</label>
+      <input type="number" id="n1" value="6458312.830" step=".001" inputmode="decimal"></div>
+  </div>
+  <div class="field"><label>P1 Elevation (m) <span>from GPS averaging; 0 if unknown</span></label>
+    <input type="number" id="z1" value="0.000" step=".001" inputmode="decimal"></div>
+
+  <!-- ── Bearing & declination ── -->
+  <div class="sh">Orientation</div>
+  <div class="grid2">
+    <div class="field"><label>Magnetic declination (°) <span>E=+  W=−  Perth≈1.5</span></label>
+      <input type="number" id="dec" value="1.5" step=".1" min="-30" max="30" inputmode="decimal"
+             oninput="updateLiveBearing()"></div>
+    <div class="field"><label>Compass bearing P1→P2 <span>decimal or D M S</span></label>
+      <input type="text" id="brg" value="045" inputmode="decimal" placeholder="e.g. 045 30 15"
+             oninput="updateLiveBearing()"></div>
+  </div>
+  <div id="live-bearing"></div>
+
+  <!-- ── Measured distances ── -->
+  <div class="sh">Field Measurements — Distances</div>
+  <div style="font-size:.78rem;color:var(--sub);margin:-4px 0 8px 2px">
+    Enter actual taped distances. Point positions are derived directly from these measurements.
+  </div>
+
+  <!-- Triangle distances -->
+  <div id="tri-dists">
+    <div class="grid3">
+      <div class="field"><label>P1→P2 (m)</label>
+        <input type="number" id="d12" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 20.003"></div>
+      <div class="field"><label>P2→P3 (m)</label>
+        <input type="number" id="d23-tri" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 25.118"></div>
+      <div class="field"><label>P3→P1 (m)</label>
+        <input type="number" id="d31" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 22.456"></div>
+    </div>
+    <div class="field" style="margin-top:4px">
+      <label>P3 position — which side of the P1→P2 line?</label>
+      <div class="rb-group">
+        <input type="radio" name="p3-side" id="p3-left"  value="left"  checked>
+        <label for="p3-left">◀  Left of P1→P2</label>
+        <input type="radio" name="p3-side" id="p3-right" value="right">
+        <label for="p3-right">Right of P1→P2  ▶</label>
+      </div>
+      <div class="hint" style="margin-top:4px">
+        Check: after calculating, compare the derived bearing P1→P3 (Bearings tab)
+        against your compass reading from P1 toward P3. If ~180° off, flip this.
+      </div>
+    </div>
+  </div>
+
+  <!-- Quad distances -->
+  <div id="quad-dists" style="display:none">
+    <div class="grid2">
+      <div class="field"><label>P1→P2 (m) <span>baseline</span></label>
+        <input type="number" id="d12q" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 30.012"></div>
+      <div class="field"><label>P2→P3 (m)</label>
+        <input type="number" id="d23q" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 20.008"></div>
+      <div class="field"><label>P3→P4 (m)</label>
+        <input type="number" id="d34" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 29.995"></div>
+      <div class="field"><label>P4→P1 (m)</label>
+        <input type="number" id="d41" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 20.003"></div>
+    </div>
+    <div class="sh">Fixing & Check Diagonals</div>
+    <div style="font-size:.78rem;color:var(--sub);margin:-4px 0 8px 2px">
+      P1→P3 fixes the quadrilateral shape (required). P2→P4 is an independent check (recommended).
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Diagonal P1→P3 (m) <span>fixing</span></label>
+        <input type="number" id="d13" step=".001" min=".1" inputmode="decimal" placeholder="required"></div>
+      <div class="field"><label>Diagonal P2→P4 (m) <span>check</span></label>
+        <input type="number" id="d24" step=".001" min=".1" inputmode="decimal" placeholder="optional"></div>
+    </div>
+    <div class="sh">Point Orientation</div>
+    <div style="font-size:.78rem;color:var(--sub);margin:-4px 0 8px 2px">
+      Specifies which side of each reference line the next point falls on.
+      Check against your compass bearing to that point from P1.
+    </div>
+    <div class="field">
+      <label>P3 — which side of the P1→P2 baseline?</label>
+      <div class="rb-group">
+        <input type="radio" name="p3q-side" id="p3q-left"  value="left"  checked>
+        <label for="p3q-left">◀  Left of P1→P2</label>
+        <input type="radio" name="p3q-side" id="p3q-right" value="right">
+        <label for="p3q-right">Right of P1→P2  ▶</label>
+      </div>
+    </div>
+    <div class="field">
+      <label>P4 — which side of the P1→P3 diagonal?</label>
+      <div class="rb-group">
+        <input type="radio" name="p4-side" id="p4-left"  value="left"  checked>
+        <label for="p4-left">◀  Left of P1→P3</label>
+        <input type="radio" name="p4-side" id="p4-right" value="right">
+        <label for="p4-right">Right of P1→P3  ▶</label>
+      </div>
+    </div>
+    <div class="hint">
+      After calculating, verify derived bearings in the Bearings tab against your
+      compass. If a point is ~180° off, flip its orientation above and recalculate.
+    </div>
+  </div>
+
+  <!-- ── Elevation ── -->
+  <div class="sh">Elevation Assignment</div>
+  <div class="field"><label>Elevation mode</label>
+    <div class="rb-group green">
+      <input type="radio" name="em" id="em-uniform" value="uniform" checked onchange="onElevMode(this.value)">
+      <label for="em-uniform">Uniform</label>
+      <input type="radio" name="em" id="em-manual" value="manual" onchange="onElevMode(this.value)">
+      <label for="em-manual">Manual entry</label>
+      <input type="radio" name="em" id="em-abney" value="abney" onchange="onElevMode(this.value)">
+      <label for="em-abney">Abney / clinometer</label>
+    </div>
+  </div>
+
+  <!-- Manual elevations -->
+  <div id="elev-manual" style="display:none">
+    <div class="hint" style="margin-bottom:8px">P1 elevation set above. Enter remaining points:</div>
+    <div id="elev-manual-fields"></div>
+  </div>
+
+  <!-- Abney elevations -->
+  <div id="elev-abney" style="display:none">
+    <div style="font-size:.78rem;color:var(--sub);margin-bottom:8px;line-height:1.5">
+      Enter slope angle (+ up, − down) and slope distance for each leg around the loop.
+      Optional reciprocal angle averages forward and back readings.
+    </div>
+    <div id="elev-abney-fields"></div>
+    <div id="abney-closure-preview" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ── Site name ── -->
+  <div class="sh">Site</div>
+  <div class="field"><label>Site name / number <span>used in exports</span></label>
+    <input type="text" id="site-name" placeholder="e.g. WAR13-10"></div>
+
+  <button class="calc-btn" onclick="calculate()">▶  CALCULATE</button>
+</section>
+
+<!-- ── COORDINATES ────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-coords">
+  <div class="sh">Derived Coordinates</div>
+  <div id="coords-out"><div class="empty"><span class="icon">📍</span>Run a calculation on the Inputs tab.</div></div>
+</section>
+
+<!-- ── QC CHECKS ──────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-qc">
+  <div class="sh">Quality Control</div>
+  <div id="qc-out"><div class="empty"><span class="icon">✔</span>QC results will appear here.</div></div>
+</section>
+
+<!-- ── BEARINGS ───────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-bearings">
+  <div class="sh">Derived Bearings</div>
+  <div id="bearings-out"><div class="empty"><span class="icon">🧭</span>Bearing summary will appear here.</div></div>
+</section>
+
+<!-- ── SITE PLAN ──────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-plan">
+  <div class="sh">Site Plan</div>
+  <canvas id="plan-canvas"></canvas>
+  <div style="font-size:.72rem;color:var(--sub);margin-top:6px;text-align:center">Schematic — not to scale</div>
+</section>
+
+<!-- ── EXPORT ─────────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-export">
+  <div class="sh">Export</div>
+  <div id="export-out"><div class="empty"><span class="icon">💾</span>Calculate first to enable export.</div></div>
+</section>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+let surveyMode = 'tri';   // 'tri' | 'quad'
+let elevMode   = 'uniform';
+let lastResult = null;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GEOMETRY ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+function parseBearing(raw) {
+  raw = raw.replace(/[°'"]/g,' ').trim();
+  const p = raw.split(/\s+/).filter(Boolean);
+  if (!p.length) throw new Error('Enter a bearing.');
+  if (p.length===1) return +p[0] % 360;
+  if (p.length===2) return (+p[0] + +p[1]/60) % 360;
+  return (+p[0] + +p[1]/60 + +p[2]/3600) % 360;
+}
+
+function addBrg(b,d){ return (b+d+360)%360 }
+
+function offsetPt(e,n,brg,dist){
+  const r=brg*Math.PI/180;
+  return [e+dist*Math.sin(r), n+dist*Math.cos(r)];
+}
+
+function dist2d(e1,n1,e2,n2){ return Math.hypot(e2-e1,n2-n1) }
+
+function brgBetween(e1,n1,e2,n2){
+  return (Math.atan2(e2-e1,n2-n1)*180/Math.PI+360)%360;
+}
+
+// Solve triangle from three sides (SSS) — returns all three angles in degrees
+function sss(a,b,c){
+  // a=opposite P1, b=opposite P2, c=opposite P3
+  // law of cosines: cos(A) = (b²+c²-a²)/(2bc)
+  const cosA = (b*b+c*c-a*a)/(2*b*c);
+  const cosB = (a*a+c*c-b*b)/(2*a*c);
+  const cosC = (a*a+b*b-c*c)/(2*a*b);
+  if(Math.abs(cosA)>1||Math.abs(cosB)>1||Math.abs(cosC)>1)
+    throw new Error('Triangle side lengths are impossible (violate triangle inequality).');
+  const A=Math.acos(cosA)*180/Math.PI;
+  const B=Math.acos(cosB)*180/Math.PI;
+  const C=Math.acos(cosC)*180/Math.PI;
+  return {A,B,C};
+}
+
+// QC status from difference in metres
+function qcSt(diff){
+  const mm=Math.abs(diff)*1000;
+  if(mm<=20)  return {s:'PASS',    cls:'pass', row:'row-pass', sym:'✔'};
+  if(mm<=50)  return {s:'PASS',    cls:'pass', row:'row-pass', sym:'✔'};
+  if(mm<=100) return {s:'MARGINAL',cls:'marg', row:'row-marg', sym:'⚠'};
+  return              {s:'FAIL',   cls:'fail', row:'row-fail', sym:'✘'};
+}
+
+// More granular thresholds for display
+function qcLabel(mm){
+  if(mm<=20)  return {s:'PASS (excellent)',cls:'pass',row:'row-pass',sym:'✔'};
+  if(mm<=50)  return {s:'PASS',           cls:'pass',row:'row-pass',sym:'✔'};
+  if(mm<=100) return {s:'MARGINAL',       cls:'marg',row:'row-marg',sym:'⚠'};
+  return              {s:'FAIL',          cls:'fail',row:'row-fail',sym:'✘'};
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRIANGLE SOLVER
+// Inputs: e1,n1 (P1), trueB (P1→P2 bearing), d12,d23,d31 (three side lengths)
+// Method:
+//   - Place P2 via bearing + d12
+//   - Use SSS to find angle at P1 (between P1→P2 and P1→P3)
+//   - Place P3 via bearing (P1→P2 bearing + angle_at_P1) + d31
+//   - Verify P2→P3 distance matches d23
+// ═══════════════════════════════════════════════════════════════════════════
+function solveTriangle(e1,n1,trueB,d12,d23,d31,p3sign){
+  // p3sign: -1 = P3 left of P1→P2 (default), +1 = P3 right of P1→P2
+  const {A:angP1,B:angP2,C:angP3} = sss(d23,d31,d12);
+
+  const [e2,n2] = offsetPt(e1,n1,trueB,d12);
+
+  // Apply sign: negative rotates bearing left (CCW), positive rotates right (CW)
+  const brgP1P3 = addBrg(trueB, p3sign * angP1);
+  const [e3,n3] = offsetPt(e1,n1,brgP1P3,d31);
+
+  // Verification
+  const d23_check = dist2d(e2,n2,e3,n3);
+  const closure_mm = Math.abs(d23_check-d23)*1000;
+
+  return {
+    pts:[{name:'P1',e:e1,n:n1},{name:'P2',e:e2,n:n2},{name:'P3',e:e3,n:n3}],
+    angles:{P1:angP1,P2:angP2,P3:angP3},
+    brgs:{P1P2:trueB, P1P3:brgP1P3, P2P3:brgBetween(e2,n2,e3,n3),
+          P2P1:addBrg(trueB,180), P3P1:addBrg(brgP1P3,180), P3P2:brgBetween(e3,n3,e2,n2)},
+    checks:[
+      {label:'Side P1→P2', meas:dist2d(e1,n1,e2,n2), exp:d12},
+      {label:'Side P2→P3', meas:d23_check,            exp:d23},
+      {label:'Side P3→P1', meas:dist2d(e3,n3,e1,n1), exp:d31},
+    ],
+    perimeter: d12+d23+d31,
+    area: 0.5*Math.abs((e2-e1)*(n3-n1)-(e3-e1)*(n2-n1))
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// QUADRILATERAL SOLVER
+// Inputs: e1,n1, trueB, d12,d23,d34,d41 (four sides), d13 (fixing diagonal),
+//         d24 (optional check diagonal)
+// Method:
+//   - P2 from P1 via bearing + d12
+//   - Triangle P1-P2-P3: sides P1P2=d12, P2P3=d23, P1P3=d13 → find P3
+//   - Triangle P1-P3-P4: sides P1P3=d13, P3P4=d34, P4P1=d41 → find P4
+//   - Verify P4→P1 distance and optional diagonal P2→P4
+// ═══════════════════════════════════════════════════════════════════════════
+function solveQuad(e1,n1,trueB,d12,d23,d34,d41,d13,d24_meas,p3sign,p4sign){
+  // p3sign: -1=P3 left of P1→P2, +1=P3 right of P1→P2
+  // p4sign: -1=P4 left of P1→P3, +1=P4 right of P1→P3
+  const [e2,n2] = offsetPt(e1,n1,trueB,d12);
+
+  // ── Solve triangle P1-P2-P3 ──────────────────────────────────────────
+  const {A:a1_123, B:a2_123} = sss(d23,d13,d12);
+  const brgP1P3 = addBrg(trueB, p3sign * a1_123);
+  const [e3,n3] = offsetPt(e1,n1,brgP1P3,d13);
+
+  // ── Solve triangle P1-P3-P4 ──────────────────────────────────────────
+  const {A:a1_134, B:a3_134} = sss(d34,d41,d13);
+  const brgP1P4 = addBrg(brgP1P3, p4sign * a1_134);
+  const [e4,n4] = offsetPt(e1,n1,brgP1P4,d41);
+
+  // ── Checks ────────────────────────────────────────────────────────────
+  const d12_check = dist2d(e1,n1,e2,n2);
+  const d23_check = dist2d(e2,n2,e3,n3);
+  const d34_check = dist2d(e3,n3,e4,n4);
+  const d41_check = dist2d(e4,n4,e1,n1);
+  const d13_check = dist2d(e1,n1,e3,n3);
+  const d24_comp  = dist2d(e2,n2,e4,n4);
+
+  const checks = [
+    {label:'Side P1→P2',      meas:d12_check, exp:d12},
+    {label:'Side P2→P3',      meas:d23_check, exp:d23},
+    {label:'Side P3→P4',      meas:d34_check, exp:d34},
+    {label:'Side P4→P1',      meas:d41_check, exp:d41},
+    {label:'Diagonal P1→P3',  meas:d13_check, exp:d13},
+  ];
+
+  // If check diagonal was measured, compare computed vs measured
+  let d24_note = null;
+  if(d24_meas!==null){
+    const diff_mm = Math.abs(d24_comp-d24_meas)*1000;
+    checks.push({label:'Diagonal P2→P4 (check)', meas:d24_meas, exp:d24_comp});
+    d24_note = {computed:d24_comp, measured:d24_meas, diff_mm};
+  } else {
+    checks.push({label:'Diagonal P2→P4 (computed)', meas:d24_comp, exp:null, info:true});
+  }
+
+  const brgs = {
+    P1P2:trueB,          P2P1:addBrg(trueB,180),
+    P2P3:brgBetween(e2,n2,e3,n3), P3P2:brgBetween(e3,n3,e2,n2),
+    P3P4:brgBetween(e3,n3,e4,n4), P4P3:brgBetween(e4,n4,e3,n3),
+    P4P1:brgBetween(e4,n4,e1,n1), P1P4:brgBetween(e1,n1,e4,n4),
+    P1P3:brgP1P3,        P3P1:addBrg(brgP1P3,180),
+    P1P4:brgP1P4,        P4P1b:addBrg(brgP1P4,180),
+    P2P4:brgBetween(e2,n2,e4,n4),
+  };
+
+  // Shoelace area
+  const area = 0.5*Math.abs(
+    (e1*(n2-n4)+e2*(n3-n1)+e3*(n4-n2)+e4*(n1-n3))
+  );
+
+  return {
+    pts:[{name:'P1',e:e1,n:n1},{name:'P2',e:e2,n:n2},
+         {name:'P3',e:e3,n:n3},{name:'P4',e:e4,n:n4}],
+    checks, brgs, d24_comp, d24_note,
+    perimeter:d12+d23+d34+d41, area
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ELEVATION ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+function getElevations(z1, nPts){
+  if(elevMode==='uniform') return Array(nPts).fill(z1);
+
+  if(elevMode==='manual'){
+    const elevs=[z1];
+    for(let i=1;i<nPts;i++){
+      const el=document.getElementById(`man-z${i}`);
+      const v=parseFloat(el?.value);
+      if(isNaN(v)) throw new Error(`Enter elevation for P${i+1}.`);
+      elevs.push(v);
+    }
+    return elevs;
+  }
+
+  // Abney
+  const abneyZ1=parseFloat(document.getElementById('abney-z1')?.value);
+  if(isNaN(abneyZ1)) throw new Error('Enter P1 elevation for Abney mode.');
+  const legs=[];
+  for(let i=0;i<nPts;i++){
+    const ang =parseFloat(document.getElementById(`ab-ang-${i}`)?.value);
+    const dist=parseFloat(document.getElementById(`ab-dist-${i}`)?.value);
+    const rec =parseFloat(document.getElementById(`ab-recip-${i}`)?.value);
+    if(isNaN(ang)||isNaN(dist))
+      throw new Error(`Enter angle and distance for Abney leg ${i+1}.`);
+    let dh=dist*Math.sin(ang*Math.PI/180);
+    if(!isNaN(rec)) dh=(dh-dist*Math.sin(rec*Math.PI/180))/2;
+    legs.push(dh);
+  }
+  // Bowditch
+  const closure=legs.reduce((s,l)=>s+l,0);
+  const mm=Math.abs(closure)*1000;
+  if(mm>100 && !confirm(`Abney loop closure is ${mm.toFixed(0)} mm (>100 mm).\nProceed anyway?`))
+    throw new Error('Cancelled.');
+  const corr=-closure/nPts;
+  const elevs=[abneyZ1];
+  for(let i=0;i<nPts-1;i++) elevs.push(elevs[i]+legs[i]+corr);
+  return elevs;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function getNum(id){ return parseFloat(document.getElementById(id)?.value) }
+function getStr(id){ return (document.getElementById(id)?.value||'').trim() }
+function el(id)    { return document.getElementById(id) }
+
+function setMode(m){
+  surveyMode=m;
+  el('btn-tri') .classList.toggle('active',m==='tri');
+  el('btn-quad').classList.toggle('active',m==='quad');
+  el('tri-dists') .style.display=m==='tri' ?'':'none';
+  el('quad-dists').style.display=m==='quad'?'':'none';
+  el('mode-desc').textContent = m==='tri'
+    ? 'Three pegs. One bearing (P1→P2) + three side distances fix the shape. No right angles required.'
+    : 'Four pegs. One bearing (P1→P2) + four sides + one diagonal (P1→P3) fix the shape. P2→P4 diagonal is an optional independent check.';
+  rebuildElevFields();
+}
+
+function onElevMode(v){
+  elevMode=v;
+  el('elev-manual').style.display=v==='manual'?'':'none';
+  el('elev-abney') .style.display=v==='abney' ?'':'none';
+  rebuildElevFields();
+}
+
+function nPts(){ return surveyMode==='tri'?3:4 }
+
+function rebuildElevFields(){
+  const n=nPts();
+  const pts=surveyMode==='tri'?['P1','P2','P3']:['P1','P2','P3','P4'];
+
+  // Manual fields (P2 onwards)
+  let mHtml='';
+  for(let i=1;i<n;i++){
+    mHtml+=`<div class="grid2" style="margin-bottom:8px">
+      <div class="field"><label>${pts[i]} Elevation (m)</label>
+        <input type="number" id="man-z${i}" step=".001" placeholder="e.g. 42.150" inputmode="decimal"></div>
+      <div class="field"><label>Source / note</label>
+        <input type="text" id="man-note${i}" placeholder="e.g. water level"
+               style="font-size:.82rem"></div>
+    </div>`;
+  }
+  el('elev-manual-fields').innerHTML=mHtml;
+
+  // Abney fields — one row per leg of the closed loop
+  // Legs: P1→P2, P2→P3, [P3→P4,] Pn→P1
+  const legLabels=[];
+  for(let i=0;i<n;i++) legLabels.push(`${pts[i]}→${pts[(i+1)%n]}`);
+
+  let aHtml=`<table style="width:100%;border-collapse:collapse;font-size:.82rem">
+    <tr>
+      <th style="text-align:left;padding:6px 8px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface)">Leg</th>
+      <th style="text-align:left;padding:6px 8px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface)">Angle (°)<br>
+          <span style="font-weight:400;color:var(--sub)">+ up, − down</span></th>
+      <th style="text-align:left;padding:6px 8px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface)">Dist (m)</th>
+      <th style="text-align:left;padding:6px 8px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface)">Recip (°)<br>
+          <span style="font-weight:400;color:var(--sub)">optional</span></th>
+      <th style="text-align:right;padding:6px 8px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface)">Δh (m)</th>
+    </tr>`;
+
+  // Also need a P1 elevation field for Abney (first time through it may not exist yet)
+  aHtml = `<div class="field" style="margin-bottom:10px">
+    <label>P1 base elevation (m) <span>from GPS averaging</span></label>
+    <input type="number" id="abney-z1" step=".001" inputmode="decimal"
+           placeholder="e.g. 42.150" oninput="updateAbneyPreview()">
+  </div>` + `<table style="width:100%;border-collapse:collapse;font-size:.82rem">
+    <tr>
+      <th style="text-align:left;padding:6px 4px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface);width:18%">Leg</th>
+      <th style="padding:6px 4px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface);width:26%">Angle (°)</th>
+      <th style="padding:6px 4px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface);width:26%">Dist (m)</th>
+      <th style="padding:6px 4px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface);width:18%">Recip (°)</th>
+      <th style="text-align:right;padding:6px 4px;color:var(--blue);font-size:.7rem;
+                 border-bottom:1px solid var(--border2);background:var(--surface);width:12%">Δh</th>
+    </tr>`;
+
+  for(let i=0;i<n;i++){
+    aHtml+=`<tr>
+      <td style="padding:5px 4px;border-bottom:1px solid var(--border);
+                 color:var(--sub);font-weight:600;white-space:nowrap">${legLabels[i]}</td>
+      <td style="padding:4px"><input type="number" id="ab-ang-${i}" step=".1"
+          placeholder="e.g. 3.5" inputmode="decimal" style="width:100%;padding:7px 6px;
+          background:var(--surface2);color:var(--text);border:1px solid var(--border);
+          border-radius:4px;font-family:var(--mono);font-size:.88rem"
+          oninput="updateAbneyPreview()"></td>
+      <td style="padding:4px"><input type="number" id="ab-dist-${i}" step=".001"
+          placeholder="e.g. 20.0" inputmode="decimal" style="width:100%;padding:7px 6px;
+          background:var(--surface2);color:var(--text);border:1px solid var(--border);
+          border-radius:4px;font-family:var(--mono);font-size:.88rem"
+          oninput="updateAbneyPreview()"></td>
+      <td style="padding:4px"><input type="number" id="ab-recip-${i}" step=".1"
+          placeholder="opt" inputmode="decimal" style="width:100%;padding:7px 6px;
+          background:var(--surface2);color:var(--text);border:1px solid var(--border);
+          border-radius:4px;font-family:var(--mono);font-size:.88rem"
+          oninput="updateAbneyPreview()"></td>
+      <td style="padding:5px 4px;border-bottom:1px solid var(--border);
+                 text-align:right;font-family:var(--mono);font-size:.82rem;
+                 color:var(--sub)" id="ab-dh-${i}">—</td>
+    </tr>`;
+  }
+  aHtml+='</table>';
+  el('elev-abney-fields').innerHTML=aHtml;
+}
+
+function updateAbneyPreview(){
+  const n=nPts();
+  let legs=[], allFilled=true;
+  for(let i=0;i<n;i++){
+    const ang =parseFloat(el(`ab-ang-${i}`)?.value);
+    const dist=parseFloat(el(`ab-dist-${i}`)?.value);
+    const rec =parseFloat(el(`ab-recip-${i}`)?.value);
+    const dhEl=el(`ab-dh-${i}`);
+    if(isNaN(ang)||isNaN(dist)){
+      if(dhEl){dhEl.textContent='—';dhEl.style.color='var(--sub)'}
+      allFilled=false; legs.push(null); continue;
+    }
+    let dh=dist*Math.sin(ang*Math.PI/180);
+    if(!isNaN(rec)) dh=(dh-dist*Math.sin(rec*Math.PI/180))/2;
+    if(dhEl){
+      dhEl.textContent=(dh>=0?'+':'')+dh.toFixed(3);
+      dhEl.style.color=dh>0.001?'var(--green)':dh<-0.001?'var(--red)':'var(--text)';
+    }
+    legs.push(dh);
+  }
+  const prev=el('abney-closure-preview');
+  if(!prev) return;
+  if(!allFilled||legs.some(l=>l===null)){prev.innerHTML='';return;}
+  const closure=legs.reduce((s,l)=>s+l,0);
+  const mm=Math.abs(closure)*1000;
+  const cls=mm<=50?'ok':mm<=100?'mg':'fl';
+  const sym=mm<=50?'✔':mm<=100?'⚠':'✘';
+  prev.innerHTML=`<div class="cbox ${cls}">
+    <div class="cl">Loop closure preview (Σ Δh)</div>
+    <div class="cv">${sym}  ${closure>=0?'+':''}${closure.toFixed(3)} m  (${mm.toFixed(0)} mm)</div>
+  </div>`;
+}
+
+function updateLiveBearing(){
+  try{
+    const dec=parseFloat(el('dec').value)||0;
+    const brg=parseBearing(el('brg').value);
+    const tb=(brg+dec+360)%360;
+    el('live-bearing').textContent=`→ True: ${tb.toFixed(2)}°T`;
+  }catch{el('live-bearing').textContent='';}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CALCULATE
+// ═══════════════════════════════════════════════════════════════════════════
+function calculate(){
+  try{
+    // ── Read GPS anchor ──
+    const e1=getNum('e1'), n1=getNum('n1'), z1=getNum('z1');
+    if(isNaN(e1)||isNaN(n1)) throw new Error('Enter P1 Easting and Northing.');
+    if(e1<0||n1<0) throw new Error('Easting and Northing must be positive (MGA2020).');
+
+    // ── Read bearing ──
+    const dec=parseFloat(el('dec').value)||0;
+    const magBrg=parseBearing(el('brg').value);
+    const trueB=(magBrg+dec+360)%360;
+
+    const site=getStr('site-name')||'(unnamed)';
+    let geo, elevs;
+
+    if(surveyMode==='tri'){
+      const d12=getNum('d12'), d23=getNum('d23-tri'), d31=getNum('d31');
+      if(isNaN(d12)||d12<=0) throw new Error('Enter distance P1→P2.');
+      if(isNaN(d23)||d23<=0) throw new Error('Enter distance P2→P3.');
+      if(isNaN(d31)||d31<=0) throw new Error('Enter distance P3→P1.');
+      if(d12>=d23+d31||d23>=d12+d31||d31>=d12+d23)
+        throw new Error('Triangle inequality violated: one side is longer than the sum of the other two.');
+      const p3sign = document.querySelector('input[name="p3-side"]:checked').value==='left' ? -1 : +1;
+      geo=solveTriangle(e1,n1,trueB,d12,d23,d31,p3sign);
+      elevs=getElevations(z1,3);
+    } else {
+      const d12=getNum('d12q'), d23=getNum('d23q');
+      const d34=getNum('d34'),  d41=getNum('d41');
+      const d13=getNum('d13');
+      const d24_raw=getNum('d24');
+      if(isNaN(d12)||d12<=0) throw new Error('Enter distance P1→P2.');
+      if(isNaN(d23)||d23<=0) throw new Error('Enter distance P2→P3.');
+      if(isNaN(d34)||d34<=0) throw new Error('Enter distance P3→P4.');
+      if(isNaN(d41)||d41<=0) throw new Error('Enter distance P4→P1.');
+      if(isNaN(d13)||d13<=0) throw new Error('Enter fixing diagonal P1→P3 (required for quadrilateral).');
+      if(d12>=d13+d23||d23>=d12+d13||d13>=d12+d23)
+        throw new Error('Triangle P1-P2-P3 (sides P1P2, P2P3, P1P3) violates triangle inequality.');
+      if(d13>=d34+d41||d34>=d13+d41||d41>=d13+d34)
+        throw new Error('Triangle P1-P3-P4 (sides P1P3, P3P4, P4P1) violates triangle inequality.');
+      const d24_meas=isNaN(d24_raw)?null:d24_raw;
+      const p3qsign = document.querySelector('input[name="p3q-side"]:checked').value==='left' ? -1 : +1;
+      const p4sign  = document.querySelector('input[name="p4-side"]:checked').value==='left'  ? -1 : +1;
+      geo=solveQuad(e1,n1,trueB,d12,d23,d34,d41,d13,d24_meas,p3qsign,p4sign);
+      elevs=getElevations(z1,4);
+    }
+
+    // Attach elevations and elevation source label
+    const em=elevMode;
+    const eSrc=em==='abney'?'Abney derived':em==='manual'?'manual entry':'uniform';
+    geo.pts.forEach((p,i)=>{
+      p.z=elevs[i];
+      p.src=i===0?'GPS averaged':`calculated (${eSrc})`;
+    });
+
+    // Finalise QC statuses
+    geo.checks.forEach(c=>{
+      if(c.info) return; // computed-only row, no QC
+      c.diff=c.meas-c.exp;
+      c.qc=qcLabel(Math.abs(c.diff)*1000);
+    });
+
+    lastResult={geo, surveyMode, site,
+                trueB, magBrg, dec,
+                elevMode:em};
+
+    renderAll();
+    showTab('coords');
+    toast('✔  Calculation complete');
+
+  }catch(e){
+    alert('Error: '+e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════════════════
+function renderAll(){
+  renderCoords();
+  renderQC();
+  renderBearings();
+  renderPlan();
+  renderExport();
+}
+
+function fN(v,dp=3){ return v.toFixed(dp) }
+function brgStr(b){ return b.toFixed(2)+'°T' }
+
+function renderCoords(){
+  const {geo}=lastResult;
+  let h=`<div style="overflow-x:auto"><table class="rtable">
+    <tr><th>Point</th><th>Easting (m)</th><th>Northing (m)</th><th>Elevation (m)</th><th>Source</th></tr>`;
+  geo.pts.forEach((p,i)=>{
+    h+=`<tr class="${i===0?'p1':''}">
+      <td>${p.name}</td><td class="r">${fN(p.e)}</td>
+      <td class="r">${fN(p.n)}</td><td class="r">${fN(p.z)}</td>
+      <td style="color:var(--sub);font-size:.78rem">${p.src}</td></tr>`;
+  });
+  h+=`</table></div>`;
+  // Area / perimeter summary
+  h+=`<div style="font-size:.82rem;color:var(--sub);margin-top:10px;line-height:1.8">
+    Perimeter: <b style="color:var(--text)">${fN(geo.perimeter)} m</b>
+    &nbsp;|&nbsp; Area: <b style="color:var(--text)">${fN(geo.area,1)} m²</b>
+    &nbsp;(${fN(geo.area/10000,4)} ha)
+  </div>`;
+  el('coords-out').innerHTML=h;
+}
+
+function renderQC(){
+  const {geo,surveyMode:sm}=lastResult;
+  let h='';
+
+  // Closure / geometry summary
+  // For triangle: check that all three sides round-trip correctly (they should be near-zero by construction)
+  // Main user-visible check: does P2→P3 computed match measured?
+  // All checks displayed in table.
+
+  h+=`<div style="overflow-x:auto"><table class="rtable">
+    <tr><th>Measurement</th><th>Measured / computed (m)</th><th>Expected (m)</th>
+        <th>Diff (mm)</th><th>Status</th></tr>`;
+
+  geo.checks.forEach(c=>{
+    if(c.info){
+      // Computed-only diagonal — just display, no QC
+      h+=`<tr><td>${c.label}</td><td class="r">${fN(c.meas)}</td>
+          <td class="r" style="color:var(--sub)">—</td>
+          <td class="r" style="color:var(--sub)">—</td>
+          <td style="color:var(--sub)">computed</td></tr>`;
+      return;
+    }
+    const mm=Math.abs(c.diff)*1000;
+    h+=`<tr class="${c.qc.row}">
+      <td>${c.label}</td><td class="r">${fN(c.meas)}</td>
+      <td class="r">${fN(c.exp)}</td>
+      <td class="r">${mm.toFixed(1)}</td>
+      <td class="${c.qc.cls}">${c.qc.sym} ${c.qc.s}</td></tr>`;
+  });
+  h+='</table></div>';
+
+  // For quad: show check diagonal result prominently if measured
+  if(sm==='quad' && lastResult.geo.d24_note){
+    const dn=lastResult.geo.d24_note;
+    const mm=dn.diff_mm;
+    const cls=mm<=50?'ok':mm<=100?'mg':'fl';
+    const sym=mm<=50?'✔':mm<=100?'⚠':'✘';
+    h+=`<div class="cbox ${cls}" style="margin-top:12px">
+      <div class="cl">Check diagonal P2→P4</div>
+      <div class="cv">${sym}  Measured ${fN(dn.measured)} m  vs  Computed ${fN(dn.computed)} m
+          &nbsp; (${mm.toFixed(0)} mm)</div>
+    </div>`;
+  }
+
+  el('qc-out').innerHTML=h;
+}
+
+function renderBearings(){
+  const {geo,surveyMode:sm,trueB,magBrg,dec}=lastResult;
+  const li=(lbl,val)=>`<li><span class="lbl">${lbl}</span><span class="val">${val}</span></li>`;
+  let h=`<ul class="blist">
+    ${li('Compass bearing P1→P2 (magnetic)',magBrg.toFixed(2)+'°M')}
+    ${li('Magnetic declination',dec>=0?'+'+dec.toFixed(1)+'° E':dec.toFixed(1)+'° W')}
+    ${li('True bearing P1→P2',brgStr(trueB))}`;
+
+  if(sm==='tri'){
+    const b=geo.brgs;
+    h+=li('True bearing P2→P3',brgStr(b.P2P3));
+    h+=li('True bearing P3→P1',brgStr(b.P3P1));
+    h+=`</ul>`;
+    h+=`<div class="sh" style="margin-top:16px">Triangle Angles</div><ul class="blist">`;
+    h+=li('Angle at P1',geo.angles.P1.toFixed(3)+'°');
+    h+=li('Angle at P2',geo.angles.P2.toFixed(3)+'°');
+    h+=li('Angle at P3',geo.angles.P3.toFixed(3)+'°');
+    h+=li('Sum of angles',(geo.angles.P1+geo.angles.P2+geo.angles.P3).toFixed(3)+'° (should be 180.000°)');
+  } else {
+    const b=geo.brgs;
+    h+=li('True bearing P2→P3',brgStr(b.P2P3));
+    h+=li('True bearing P3→P4',brgStr(b.P3P4));
+    h+=li('True bearing P4→P1',brgStr(b.P4P1));
+    h+=li('Diagonal bearing P1→P3',brgStr(b.P1P3));
+    h+=li('Diagonal bearing P2→P4',brgStr(b.P2P4));
+  }
+  h+='</ul>';
+  el('bearings-out').innerHTML=h;
+}
+
+function renderPlan(){
+  const canvas=el('plan-canvas');
+  const ctx=canvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.clientWidth*dpr, H=canvas.clientHeight*dpr;
+  canvas.width=W; canvas.height=H;
+  ctx.scale(dpr,dpr);
+  const cW=canvas.clientWidth, cH=canvas.clientHeight;
+
+  ctx.fillStyle='#0c1020'; ctx.fillRect(0,0,cW,cH);
+  if(!lastResult) return;
+
+  const pts=lastResult.geo.pts;
+  const es=pts.map(p=>p.e), ns=pts.map(p=>p.n);
+  const eMin=Math.min(...es),eMax=Math.max(...es);
+  const nMin=Math.min(...ns),nMax=Math.max(...ns);
+  const pad=56;
+  const sc=Math.min((cW-2*pad)/Math.max(eMax-eMin,1),(cH-2*pad)/Math.max(nMax-nMin,1));
+
+  const sx=e=>(pad+(e-eMin)*sc+(cW-2*pad-(eMax-eMin)*sc)/2);
+  const sy=n=>(cH-pad-(n-nMin)*sc-(cH-2*pad-(nMax-nMin)*sc)/2);
+
+  // Faint grid
+  ctx.strokeStyle='#1a2040'; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const x=pad+i*(cW-2*pad)/4, y=pad+i*(cH-2*pad)/4;
+    ctx.beginPath();ctx.moveTo(x,pad);ctx.lineTo(x,cH-pad);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(cW-pad,y);ctx.stroke();
+  }
+
+  const spts=pts.map(p=>({x:sx(p.e),y:sy(p.n),name:p.name}));
+
+  // Fill polygon
+  ctx.beginPath();ctx.moveTo(spts[0].x,spts[0].y);
+  spts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.closePath();
+  ctx.fillStyle='rgba(74,144,192,0.07)';ctx.fill();
+
+  // Diagonal(s) for quad
+  if(spts.length===4){
+    ctx.setLineDash([6,4]);ctx.strokeStyle='rgba(231,76,60,0.4)';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(spts[0].x,spts[0].y);ctx.lineTo(spts[2].x,spts[2].y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(spts[1].x,spts[1].y);ctx.lineTo(spts[3].x,spts[3].y);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Outline
+  ctx.strokeStyle='#4a90c0';ctx.lineWidth=2;ctx.setLineDash([]);
+  ctx.beginPath();ctx.moveTo(spts[0].x,spts[0].y);
+  spts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.closePath();ctx.stroke();
+
+  // Points
+  const cols={P1:'#e74c3c',P2:'#2ecc71',P3:'#f39c12',P4:'#4a90c0'};
+  spts.forEach(p=>{
+    const col=cols[p.name]||'#ccc';
+    ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);
+    ctx.fillStyle=col;ctx.fill();
+    ctx.strokeStyle='#0c1020';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle=col;ctx.font=`bold 11px ${getComputedStyle(document.body).fontFamily}`;
+    const ox=p.x>cW/2?-22:12, oy=p.y>cH/2?-10:18;
+    ctx.fillText(p.name,p.x+ox,p.y+oy);
+  });
+
+  // North arrow
+  const ax=cW-30,ay=cH-50;
+  ctx.strokeStyle='#dce4f0';ctx.lineWidth=1.5;ctx.setLineDash([]);
+  ctx.beginPath();ctx.moveTo(ax,ay+22);ctx.lineTo(ax,ay+4);
+  ctx.lineTo(ax-5,ay+10);ctx.moveTo(ax,ay+4);ctx.lineTo(ax+5,ay+10);ctx.stroke();
+  ctx.fillStyle='#dce4f0';ctx.font='bold 11px sans-serif';
+  ctx.textAlign='center';ctx.fillText('N',ax,ay);ctx.textAlign='start';
+
+  // Scale bar
+  const barM=(eMax-eMin)*0.35||5;
+  const barPx=barM*sc;
+  ctx.strokeStyle='#dce4f0';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(pad,cH-18);ctx.lineTo(pad+barPx,cH-18);
+  ctx.moveTo(pad,cH-22);ctx.lineTo(pad,cH-14);
+  ctx.moveTo(pad+barPx,cH-22);ctx.lineTo(pad+barPx,cH-14);ctx.stroke();
+  ctx.fillStyle='#7a8aaa';ctx.font='10px sans-serif';
+  ctx.textAlign='center';ctx.fillText(`${barM.toFixed(1)} m`,pad+barPx/2,cH-25);
+  ctx.textAlign='start';
+}
+
+function renderExport(){
+  el('export-out').innerHTML=`
+    <p style="font-size:.82rem;color:var(--sub);margin-bottom:12px;line-height:1.6">
+      Export coordinates and metadata for use in RayStudio or GIS.
+    </p>
+    <div class="exp-row">
+      <button class="exp-btn primary" onclick="exportCSV()">💾 Export CSV</button>
+      <button class="exp-btn" onclick="exportFieldbook()">📄 Field Book (.txt)</button>
+      <button class="exp-btn" onclick="copyClip()">📋 Copy CSV</button>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════════════
+function buildCSV(){
+  const {geo,site,surveyMode:sm,trueB,magBrg,dec}=lastResult;
+  const now=new Date().toISOString().slice(0,16).replace('T',' ');
+  const lines=[
+    '# GPS Traverse Calculator — Export',
+    `# Generated: ${now}`,
+    `# Site: ${site}`,
+    `# Mode: ${sm==='tri'?'Triangle':'Quadrilateral'}`,
+    `# P1→P2 bearing: ${magBrg.toFixed(2)}°M + ${dec>=0?'+':''}${dec.toFixed(1)}° decl = ${trueB.toFixed(2)}°T`,
+    'name,easting,northing,elevation,source',
+  ];
+  geo.pts.forEach(p=>lines.push(`${p.name},${fN(p.e)},${fN(p.n)},${fN(p.z)},${p.src}`));
+  return lines.join('\r\n');
+}
+
+function buildFieldbook(){
+  const {geo,site,surveyMode:sm,trueB,magBrg,dec}=lastResult;
+  const now=new Date().toISOString().slice(0,16).replace('T',' ');
+  const SEP='='.repeat(70), DASH='-'.repeat(70);
+  const lines=[SEP,'GPS TRAVERSE CALCULATOR — FIELD BOOK',SEP,
+    `Generated : ${now}`,`Site      : ${site}`,
+    `Mode      : ${sm==='tri'?'Triangle (3-point)':'Quadrilateral (4-point)'}`,
+    `Bearing   : ${magBrg.toFixed(2)}°M  +  ${dec.toFixed(1)}° decl  =  ${trueB.toFixed(2)}°T`,
+    '',DASH,'COORDINATES',DASH,
+    `${'Point'.padEnd(6)} ${'Easting'.padStart(14)} ${'Northing'.padStart(14)} ${'Elev'.padStart(10)}  Source`,DASH];
+  geo.pts.forEach(p=>lines.push(
+    `${p.name.padEnd(6)} ${fN(p.e).padStart(14)} ${fN(p.n).padStart(14)} ${fN(p.z).padStart(10)}  ${p.src}`));
+  lines.push('',DASH,'QC CHECKS',DASH,
+    `${'Measurement'.padEnd(28)} ${'Measured'.padStart(10)} ${'Expected'.padStart(10)} ${'Diff(mm)'.padStart(10)}  Status`,DASH);
+  geo.checks.forEach(c=>{
+    if(c.info){
+      lines.push(`${c.label.padEnd(28)} ${fN(c.meas).padStart(10)}  ${'—'.padStart(10)} ${'—'.padStart(10)}  computed`);
+    } else {
+      lines.push(`${c.label.padEnd(28)} ${fN(c.meas).padStart(10)} ${fN(c.exp).padStart(10)} ${(Math.abs(c.diff)*1000).toFixed(1).padStart(10)}  ${c.qc.s}`);
+    }
+  });
+  lines.push('',DASH,`Perimeter: ${fN(geo.perimeter)} m   Area: ${fN(geo.area,1)} m² (${fN(geo.area/10000,4)} ha)`,SEP);
+  return lines.join('\r\n');
+}
+
+function dlFile(content,name,mime){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download=name;document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(a.href);
+}
+
+function stem(){ return (lastResult?.site||'traverse').replace(/[^\w-]/g,'_')||'traverse' }
+function exportCSV(){ if(!lastResult)return; dlFile(buildCSV(),stem()+'_coords.csv','text/csv'); toast('✔ CSV downloaded') }
+function exportFieldbook(){ if(!lastResult)return; dlFile(buildFieldbook(),stem()+'_fieldbook.txt','text/plain'); toast('✔ Field book downloaded') }
+function copyClip(){ if(!lastResult)return; navigator.clipboard.writeText(buildCSV()).then(()=>toast('✔ Copied')) }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABS & TOAST
+// ═══════════════════════════════════════════════════════════════════════════
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.panel===id));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+id));
+  if(id==='plan'&&lastResult) renderPlan();
+}
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>showTab(t.dataset.panel)));
+
+let toastTimer;
+function toast(msg){
+  const e=el('toast'); e.textContent=msg; e.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>e.classList.remove('show'),2200);
+}
+
+window.addEventListener('resize',()=>{
+  if(lastResult&&el('panel-plan').classList.contains('active')) renderPlan();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+setMode('tri');
+updateLiveBearing();
+</script>
+</body>
+</html>
