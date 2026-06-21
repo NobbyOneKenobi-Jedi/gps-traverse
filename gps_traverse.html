@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GPS Traverse">
+<meta name="theme-color" content="#d8d8c8">
+<meta name="description" content="GPS Traverse Calculator — archaeological site boundary survey, triangle and quadrilateral modes, GDA2020/MGA2020">
+<title>GPS Traverse Calculator</title>
+
+<!-- PWA web manifest (inline, no separate file needed) -->
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22GPS%20Traverse%20Calculator%22%2C%22short_name%22%3A%22GPS%20Traverse%22%2C%22description%22%3A%22Archaeological%20site%20boundary%20traverse%20calculator%22%2C%22start_url%22%3A%22.%2F%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23151824%22%2C%22theme_color%22%3A%22%23151824%22%2C%22orientation%22%3A%22portrait-primary%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%2C%253Csvg%2520xmlns%253D%2527http%253A%252F%252Fwww.w3.org%252F2000%252Fsvg%2527%2520viewBox%253D%25270%25200%252096%252096%2527%253E%253Crect%2520width%253D%252796%2527%2520height%253D%252796%2527%2520rx%253D%252716%2527%2520fill%253D%2527%2523151824%2527%252F%253E%253Cpolygon%2520points%253D%252748%252C16%252080%252C72%252016%252C72%2527%2520fill%253D%2527none%2527%2520stroke%253D%2527%2523d4860a%2527%2520stroke-width%253D%25274%2527%252F%253E%253Ccircle%2520cx%253D%252748%2527%2520cy%253D%252768%2527%2520r%253D%25276%2527%2520fill%253D%2527%2523e74c3c%2527%252F%253E%253C%252Fsvg%253E%22%2C%22sizes%22%3A%2296x96%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
+
+<!-- Apple touch icon (inline SVG as data URI) -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' rx='16' fill='%23d8d8c8'/><polygon points='48,16 80,72 16,72' fill='none' stroke='%230a0a08' stroke-width='4'/><circle cx='48' cy='68' r='6' fill='%23e74c3c'/></svg>">
+
+<script>
+// ── Service worker registration for offline caching ──────────────────────
+if ('serviceWorker' in navigator) {
+  // Inline service worker as a blob — no separate sw.js file needed
+  const swCode = `
+const CACHE = 'gps-traverse-v2';
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(['./', './index.html']))
+    .catch(() => {})  // graceful fail if offline on first install
+  );
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+  ));
+  self.clients.claim();
+});
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(cached => {
+      if (cached) return cached;
+      return fetch(e.request).then(resp => {
+        if (resp && resp.status === 200 && resp.type === 'basic') {
+          const clone = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return resp;
+      }).catch(() => cached || new Response('Offline', {status: 503}));
+    })
+  );
+});
+`;
+  const blob = new Blob([swCode], {type: 'application/javascript'});
+  const swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl, {scope: './'})
+    .catch(() => {}); // silent fail — still works without SW
+}
+</script>
+<style>
+/* ── Reset ────────────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* LCD greyscale — high contrast for outdoor/sunlight use */
+  --bg:#d8d8c8;
+  --surface:#c8c8b8;
+  --surface2:#e8e8dc;
+  --border:#888880;
+  --border2:#555550;
+  --text:#0a0a08;
+  --sub:#444440;
+  --amber:#0a0a08;
+  --amber-dim:#b0b0a0;
+  --green:#1a4a1a;
+  --green-dim:#2a6a2a;
+  --red:#6a0000;
+  --yellow:#5a4000;
+  --blue:#1a2a4a;
+  --mono:"Consolas","Menlo","Courier New",monospace;
+  --ui:system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r:6px;--safe-bot:env(safe-area-inset-bottom,0px);
+}
+html{font-size:15px}
+body{font-family:var(--ui);background:var(--bg);color:var(--text);
+     min-height:100dvh;padding-bottom:var(--safe-bot);line-height:1.5}
+button,select,input{font-family:inherit;font-size:1rem}
+input[type=number]{-moz-appearance:textfield}
+input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+header{background:var(--surface);border-bottom:2px solid var(--border2);
+       padding:12px 16px 10px;position:sticky;top:0;z-index:100;
+       display:flex;align-items:baseline;gap:12px}
+header h1{font-size:1.05rem;font-weight:700;letter-spacing:.03em}
+header span{font-size:.75rem;color:var(--sub);letter-spacing:.05em}
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────── */
+.tabs{display:flex;overflow-x:auto;scrollbar-width:none;
+      border-bottom:1px solid var(--border);background:var(--surface);
+      position:sticky;top:49px;z-index:99}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto;padding:11px 18px;font-size:.82rem;font-weight:600;
+     letter-spacing:.04em;color:var(--sub);background:transparent;border:none;
+     border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;
+     transition:color .15s,border-color .15s;-webkit-tap-highlight-color:transparent}
+.tab.active{color:var(--text);border-bottom-color:var(--text);font-weight:700}
+
+/* ── Panels ───────────────────────────────────────────────────────────────── */
+.panel{display:none;padding:16px;max-width:680px;margin:0 auto}
+.panel.active{display:block}
+
+/* ── Section heads ────────────────────────────────────────────────────────── */
+.sh{font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--blue);margin:20px 0 8px;display:flex;align-items:center;gap:8px}
+.sh::after{content:"";flex:1;height:1px;background:var(--border)}
+.sh:first-child{margin-top:4px}
+
+/* ── Mode toggle ──────────────────────────────────────────────────────────── */
+.mode-toggle{display:grid;grid-template-columns:1fr 1fr;gap:2px;
+             background:var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:4px}
+.mode-btn{padding:11px 8px;text-align:center;font-size:.85rem;font-weight:600;
+          background:var(--surface2);color:var(--sub);border:none;cursor:pointer;
+          transition:background .15s,color .15s;-webkit-tap-highlight-color:transparent}
+.mode-btn.active{background:var(--border2);color:var(--bg);font-weight:700}
+
+/* ── Fields ───────────────────────────────────────────────────────────────── */
+.field{margin-bottom:10px}
+.field label{display:block;font-size:.78rem;font-weight:600;color:var(--sub);
+             letter-spacing:.04em;margin-bottom:4px}
+.field label span{color:var(--sub);font-weight:400;margin-left:4px}
+.field input,.field select{width:100%;padding:11px 12px;background:var(--surface2);
+  color:var(--text);border:1px solid var(--border);border-radius:var(--r);
+  font-family:var(--mono);font-size:.95rem;outline:none;
+  transition:border-color .15s;-webkit-appearance:none}
+.field input:focus,.field select:focus{border-color:var(--blue)}
+.field select{cursor:pointer}
+.field select option{background:var(--surface2)}
+.hint{font-size:.73rem;color:var(--sub);margin-top:3px}
+.hint.ok{color:var(--green)}.hint.warn{color:var(--yellow)}.hint.err{color:var(--red)}
+
+/* ── Two-column grid ──────────────────────────────────────────────────────── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+
+/* ── Live display ─────────────────────────────────────────────────────────── */
+#live-bearing{font-size:.8rem;color:var(--green);font-family:var(--mono);
+              margin:2px 0 10px 2px;min-height:1.2em}
+
+/* ── Radio pill buttons ───────────────────────────────────────────────────── */
+.rb-group{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.rb-group input[type=radio]{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+.rb-group label{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:9px 14px;font-size:.82rem;font-weight:600;
+  background:var(--surface2);color:var(--sub);
+  border:1.5px solid var(--border);border-radius:20px;
+  cursor:pointer;user-select:none;white-space:nowrap;
+  transition:background .15s,color .15s,border-color .15s;
+  -webkit-tap-highlight-color:transparent}
+.rb-group label:hover{border-color:var(--border2);color:var(--text)}
+.rb-group input[type=radio]:checked + label{
+  background:var(--text);color:var(--bg);border-color:var(--text);font-weight:700}
+.rb-group.green input[type=radio]:checked + label{
+  background:var(--green);color:var(--bg);border-color:var(--green);font-weight:700}
+
+/* ── Required field highlight ─────────────────────────────────────────────── */
+.field input.req-empty{border-color:var(--red)!important}
+.field input.req-empty::placeholder{color:rgba(231,76,60,0.7)}
+
+/* ── Calculate button ─────────────────────────────────────────────────────── */
+.calc-btn{width:100%;padding:15px;background:var(--text);color:var(--bg);
+          border:1px solid var(--text);border-radius:var(--r);font-size:1rem;
+          font-weight:700;letter-spacing:.05em;cursor:pointer;margin-top:18px;
+          transition:background .15s;-webkit-tap-highlight-color:transparent}
+.calc-btn:active{background:var(--border2);color:var(--bg)}
+
+/* ── Results tables ───────────────────────────────────────────────────────── */
+.rtable{width:100%;border-collapse:collapse;font-family:var(--mono);
+        font-size:.82rem;margin-top:4px}
+.rtable th{text-align:left;padding:7px 8px;color:var(--blue);font-size:.7rem;
+           font-weight:700;letter-spacing:.06em;border-bottom:1px solid var(--border2);
+           background:var(--surface)}
+.rtable td{padding:8px;border-bottom:1px solid var(--border)}
+.rtable tr:last-child td{border-bottom:none}
+.rtable td.r{text-align:right}
+.rtable .p1 td:first-child{color:var(--red);font-weight:700}
+.rtable :not(.p1) td:first-child{color:var(--blue)}
+.pass{color:var(--green);font-weight:700}
+.marg{color:var(--yellow);font-weight:700}
+.fail{color:var(--red);font-weight:700}
+.row-pass{background:rgba(26,74,26,.10)}
+.row-marg{background:rgba(90,64,0,.10)}
+.row-fail{background:rgba(106,0,0,.10)}
+
+/* ── Closure box ──────────────────────────────────────────────────────────── */
+.cbox{border-radius:var(--r);padding:14px;margin-top:10px;border:1px solid var(--border2)}
+.cbox .cl{font-size:.7rem;font-weight:700;letter-spacing:.08em;
+          text-transform:uppercase;color:var(--sub);margin-bottom:6px}
+.cbox .cv{font-family:var(--mono);font-size:1.3rem;font-weight:700}
+.cbox .cn{font-size:.75rem;color:var(--sub);margin-top:4px}
+.cbox.ok{background:rgba(26,74,26,.12);border-color:var(--green)}.cbox.ok .cv{color:var(--green)}
+.cbox.mg{background:rgba(90,64,0,.12);border-color:var(--yellow)}.cbox.mg .cv{color:var(--yellow)}
+.cbox.fl{background:rgba(106,0,0,.12);border-color:var(--red)}.cbox.fl .cv{color:var(--red)}
+
+/* ── Bearings list ────────────────────────────────────────────────────────── */
+.blist{list-style:none;margin-top:4px}
+.blist li{display:flex;justify-content:space-between;align-items:baseline;
+          padding:9px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.blist li:last-child{border-bottom:none}
+.blist .lbl{color:var(--sub);font-size:.8rem}
+.blist .val{font-family:var(--mono);font-weight:600}
+
+/* ── Canvas ───────────────────────────────────────────────────────────────── */
+#plan-canvas{width:100%;aspect-ratio:1/1;max-height:60vw;background:#0c1020;
+             border-radius:var(--r);border:1px solid var(--border);display:block;
+             margin-top:4px;touch-action:none}
+
+/* ── Export ───────────────────────────────────────────────────────────────── */
+.exp-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.exp-btn{padding:13px 10px;text-align:center;background:var(--surface2);color:var(--text);
+         border:1px solid var(--border);border-radius:var(--r);font-size:.82rem;
+         font-weight:600;cursor:pointer;transition:border-color .15s;
+         -webkit-tap-highlight-color:transparent}
+.exp-btn:active{border-color:var(--blue)}
+.exp-btn.primary{background:rgba(26,42,74,.15);border-color:var(--blue);color:var(--blue)}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.empty{text-align:center;padding:48px 16px;color:var(--sub);
+       font-size:.85rem;line-height:1.8}
+.empty .icon{font-size:2.5rem;display:block;margin-bottom:12px;opacity:.4}
+
+/* ── Warn banner ──────────────────────────────────────────────────────────── */
+.warn-banner{font-size:.8rem;color:var(--yellow);background:rgba(90,64,0,.10);
+             border:1px solid var(--yellow);border-radius:var(--r);
+             padding:10px 12px;margin-bottom:10px;line-height:1.6}
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+#toast{position:fixed;bottom:calc(20px + var(--safe-bot));left:50%;
+       transform:translateX(-50%) translateY(80px);background:var(--surface2);
+       border:1px solid var(--green);color:var(--green);padding:10px 20px;
+       border-radius:20px;font-size:.85rem;font-weight:600;
+       transition:transform .25s ease,opacity .25s ease;
+       opacity:0;pointer-events:none;z-index:999;white-space:nowrap}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media(min-width:600px){
+  .panel{padding:20px 24px}
+  .exp-row{grid-template-columns:repeat(3,1fr)}
+  #plan-canvas{max-height:420px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important}
+}
+</style>
+</head>
+<noscript>
+  <div style="font-family:sans-serif;background:#d8d8c8;color:#0a0a08;padding:32px;text-align:center;min-height:100vh">
+    <h1 style="color:#0a0a08;margin-bottom:16px">GPS Traverse Calculator</h1>
+    <p>JavaScript is required to run this app. Please enable JavaScript in your browser settings.</p>
+  </div>
+</noscript>
+
+<body>
+
+<header>
+  <h1>GPS Traverse Calculator</h1>
+  <span>GDA2020 / MGA2020</span>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-panel="input">Inputs</button>
+  <button class="tab" data-panel="coords">Coordinates</button>
+  <button class="tab" data-panel="qc">QC Checks</button>
+  <button class="tab" data-panel="bearings">Bearings</button>
+  <button class="tab" data-panel="plan">Site Plan</button>
+  <button class="tab" data-panel="export">Export</button>
+</nav>
+
+<!-- ── INPUTS ─────────────────────────────────────────────────────────────── -->
+<section class="panel active" id="panel-input">
+
+  <!-- ── Survey details ── -->
+  <div class="sh">Survey Details</div>
+  <div class="field">
+    <label>Site name / number</label>
+    <input type="text" id="site-name" placeholder="e.g. WAR13-10">
+  </div>
+  <div class="grid2">
+    <div class="field">
+      <label>Date <span>auto-filled</span></label>
+      <input type="text" id="survey-date" placeholder="DD/MM/YYYY" readonly
+             style="background:var(--surface);cursor:default">
+    </div>
+    <div class="field">
+      <label>Surveyor</label>
+      <input type="text" id="surveyor-name" placeholder="e.g. K. Smith">
+    </div>
+  </div>
+
+  <div class="sh">Survey Mode</div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btn-tri"  onclick="setMode('tri')">▲  Triangle (3 pts)</button>
+    <button class="mode-btn"        id="btn-quad" onclick="setMode('quad')">▪  Quadrilateral (4 pts)</button>
+  </div>
+  <div style="font-size:.78rem;color:var(--sub);margin:4px 0 8px 2px" id="mode-desc"></div>
+
+  <!-- ── P1 GPS anchor ── -->
+  <div class="sh">P1 — GPS Anchor</div>
+  <div class="grid2">
+    <div class="field"><label>Easting (m) <span>MGA2020</span></label>
+      <input type="number" id="e1" step=".001" inputmode="decimal" placeholder="e.g. 394820.470"></div>
+    <div class="field"><label>Northing (m)</label>
+      <input type="number" id="n1" step=".001" inputmode="decimal" placeholder="e.g. 6458312.830"></div>
+  </div>
+  <div class="field"><label>P1 Elevation (m) <span>from GPS averaging; 0 if unknown</span></label>
+    <input type="number" id="z1" step=".001" inputmode="decimal" placeholder="e.g. 42.150 (or 0)"
+           oninput="syncAbneyDistances()"></div>
+
+  <!-- ── Bearing & declination ── -->
+  <div class="sh">Orientation</div>
+  <div class="grid2">
+    <div class="field"><label>Magnetic declination (°) <span>E=+  W=−  Perth≈1.5</span></label>
+      <input type="number" id="dec" step=".1" min="-30" max="30" inputmode="decimal" placeholder="Perth ≈ 1.5"
+             oninput="updateLiveBearing()">
+      <button type="button" onclick="estimateDeclination()"
+              style="margin-top:6px;width:100%;padding:8px;background:var(--surface2);
+                     color:var(--blue);border:1px solid var(--border2);border-radius:var(--r);
+                     font-size:.78rem;font-weight:600;cursor:pointer">
+        Estimate from GPS position
+      </button>
+      <div id="dec-estimate-note" class="hint" style="margin-top:4px"></div>
+    </div>
+    <div class="field"><label>Compass bearing P1→P2 <span>decimal or D M S</span></label>
+      <input type="text" id="brg" inputmode="decimal" placeholder="e.g. 045 30 15"
+             oninput="updateLiveBearing()"></div>
+  </div>
+  <div id="live-bearing"></div>
+
+  <!-- ── Measured distances ── -->
+  <div class="sh">Field Measurements — Distances</div>
+  <div id="dist-hint" style="font-size:.78rem;color:var(--sub);margin:-4px 0 8px 2px">
+    Enter <b style="color:var(--text)">horizontal</b> distances (taped horizontal,
+    or break-tape method on slopes). On steep ground use Abney mode — enter slope
+    distances there and the app converts to horizontal automatically.
+  </div>
+
+  <!-- Triangle distances (hidden in Abney mode) -->
+  <div id="tri-dists">
+    <div id="tri-horiz-dists">
+      <div class="grid3">
+        <div class="field"><label>P1→P2 horizontal (m)</label>
+          <input type="number" id="d12" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 20.003" oninput="syncAbneyDistances()"></div>
+        <div class="field"><label>P2→P3 horizontal (m)</label>
+          <input type="number" id="d23-tri" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 25.118" oninput="syncAbneyDistances()"></div>
+        <div class="field"><label>P3→P1 horizontal (m)</label>
+          <input type="number" id="d31" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 22.456" oninput="syncAbneyDistances()"></div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:4px">
+      <label>P3 position — which side of the P1→P2 line?</label>
+      <div class="rb-group">
+        <input type="radio" name="p3-side" id="p3-left"  value="left"  checked onchange="orientState.p3side=this.value">
+        <label for="p3-left">◀  Left of P1→P2</label>
+        <input type="radio" name="p3-side" id="p3-right" value="right" onchange="orientState.p3side=this.value">
+        <label for="p3-right">Right of P1→P2  ▶</label>
+      </div>
+      <div class="hint" style="margin-top:4px">
+        Check: after calculating, compare the derived bearing P1→P3 (Bearings tab)
+        against your compass reading from P1 toward P3. If ~180° off, flip this.
+      </div>
+    </div>
+  </div>
+
+  <!-- Quad distances -->
+  <div id="quad-dists" style="display:none">
+    <div id="quad-horiz-dists">
+      <div class="grid2">
+        <div class="field"><label>P1→P2 horizontal (m) <span>baseline</span></label>
+          <input type="number" id="d12q" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 30.012" oninput="syncAbneyDistances()"></div>
+        <div class="field"><label>P2→P3 horizontal (m)</label>
+          <input type="number" id="d23q" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 20.008" oninput="syncAbneyDistances()"></div>
+        <div class="field"><label>P3→P4 horizontal (m)</label>
+          <input type="number" id="d34" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 29.995" oninput="syncAbneyDistances()"></div>
+        <div class="field"><label>P4→P1 horizontal (m)</label>
+          <input type="number" id="d41" step=".001" min=".1" inputmode="decimal" placeholder="e.g. 20.003" oninput="syncAbneyDistances()"></div>
+      </div>
+    </div>
+    <div class="sh">Fixing & Check Diagonals</div>
+    <div style="font-size:.78rem;color:var(--sub);margin:-4px 0 8px 2px">
+      P1→P3 fixes the quadrilateral shape (required). P2→P4 is an independent check (recommended).
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Diagonal P1→P3 (m) <span>fixing</span></label>
+        <input type="number" id="d13" step=".001" min=".1" inputmode="decimal" placeholder="required"></div>
+      <div class="field"><label>Diagonal P2→P4 (m) <span>check</span></label>
+        <input type="number" id="d24" step=".001" min=".1" inputmode="decimal" placeholder="optional"></div>
+    </div>
+    <div class="sh">Point Orientation</div>
+    <div style="font-size:.78rem;color:var(--sub);margin:-4px 0 8px 2px">
+      Specifies which side of each reference line the next point falls on.
+      Check against your compass bearing to that point from P1.
+    </div>
+    <div class="field">
+      <label>P3 — which side of the P1→P2 baseline?</label>
+      <div class="rb-group">
+        <input type="radio" name="p3q-side" id="p3q-left"  value="left"  checked onchange="orientState.p3qside=this.value">
+        <label for="p3q-left">◀  Left of P1→P2</label>
+        <input type="radio" name="p3q-side" id="p3q-right" value="right" onchange="orientState.p3qside=this.value">
+        <label for="p3q-right">Right of P1→P2  ▶</label>
+      </div>
+    </div>
+    <div class="field">
+      <label>P4 — which side of the P1→P3 diagonal?</label>
+      <div class="rb-group">
+        <input type="radio" name="p4-side" id="p4-left"  value="left"  checked onchange="orientState.p4side=this.value">
+        <label for="p4-left">◀  Left of P1→P3</label>
+        <input type="radio" name="p4-side" id="p4-right" value="right" onchange="orientState.p4side=this.value">
+        <label for="p4-right">Right of P1→P3  ▶</label>
+      </div>
+    </div>
+    <div class="hint">
+      After calculating, verify derived bearings in the Bearings tab against your
+      compass. If a point is ~180° off, flip its orientation above and recalculate.
+    </div>
+  </div>
+
+  <!-- ── Elevation ── -->
+  <div class="sh">Elevation Assignment</div>
+  <div class="field"><label>Elevation mode</label>
+    <div class="rb-group green">
+      <input type="radio" name="em" id="em-uniform" value="uniform" checked onchange="onElevMode(this.value)">
+      <label for="em-uniform">Uniform</label>
+      <input type="radio" name="em" id="em-manual" value="manual" onchange="onElevMode(this.value)">
+      <label for="em-manual">Manual entry</label>
+      <input type="radio" name="em" id="em-abney" value="abney" onchange="onElevMode(this.value)">
+      <label for="em-abney">Abney / clinometer</label>
+    </div>
+  </div>
+
+  <!-- Manual elevations -->
+  <div id="elev-manual" style="display:none">
+    <div class="hint" style="margin-bottom:8px">P1 elevation set above. Enter remaining points:</div>
+    <div id="elev-manual-fields"></div>
+  </div>
+
+  <!-- Abney elevations -->
+  <div id="elev-abney" style="display:none">
+    <div style="font-size:.78rem;color:var(--sub);margin-bottom:8px;line-height:1.5">
+      Enter <b style="color:var(--text)">slope distance</b> and angle for each leg.
+      The app converts slope → horizontal automatically for the geometry solver
+      (horiz = slope × cos(angle)), and uses slope × sin(angle) for the elevation Δh.
+      Horizontal distance fields above are hidden in this mode.
+    </div>
+    <div id="elev-abney-fields"></div>
+    <div id="abney-closure-preview" style="margin-top:8px"></div>
+  </div>
+
+  <button class="calc-btn" onclick="calculate()">▶  CALCULATE</button>
+</section>
+
+<!-- ── COORDINATES ────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-coords">
+  <div class="sh">Derived Coordinates</div>
+  <div id="coords-out"><div class="empty"><span class="icon">📍</span>Run a calculation on the Inputs tab.</div></div>
+</section>
+
+<!-- ── QC CHECKS ──────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-qc">
+  <div class="sh">Quality Control</div>
+  <div id="qc-out"><div class="empty"><span class="icon">✔</span>QC results will appear here.</div></div>
+</section>
+
+<!-- ── BEARINGS ───────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-bearings">
+  <div class="sh">Derived Bearings</div>
+  <div id="bearings-out"><div class="empty"><span class="icon">🧭</span>Bearing summary will appear here.</div></div>
+</section>
+
+<!-- ── SITE PLAN ──────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-plan">
+  <div class="sh">Site Plan</div>
+  <canvas id="plan-canvas"></canvas>
+  <div style="font-size:.72rem;color:var(--sub);margin-top:6px;text-align:center">Schematic — not to scale</div>
+</section>
+
+<!-- ── EXPORT ─────────────────────────────────────────────────────────────── -->
+<section class="panel" id="panel-export">
+  <div class="sh">Export</div>
+  <div id="export-out"><div class="empty"><span class="icon">💾</span>Calculate first to enable export.</div></div>
+</section>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════
+let surveyMode = 'tri';   // 'tri' | 'quad'
+let elevMode   = 'uniform';
+let lastResult = null;
+// Persist orientation choices across mode switches
+const orientState = { p3side:'left', p3qside:'left', p4side:'left' };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAGNETIC DECLINATION — OFFLINE WA LOOKUP TABLE
+// ═══════════════════════════════════════════════════════════════════════════
+const WA_DECLINATION_TABLE = [
+  {name:'Perth',          lat:-31.953, lon:115.857, dec:-1.50},
+  {name:'Fremantle',      lat:-32.055, lon:115.747, dec:-1.55},
+  {name:'Mandurah',       lat:-32.529, lon:115.722, dec:-1.62},
+  {name:'Bunbury',        lat:-33.327, lon:115.642, dec:-1.75},
+  {name:'Busselton',      lat:-33.652, lon:115.345, dec:-1.85},
+  {name:'Margaret River', lat:-33.955, lon:115.075, dec:-1.95},
+  {name:'Albany',         lat:-35.025, lon:117.884, dec:-1.65},
+  {name:'Esperance',      lat:-33.860, lon:121.891, dec:-0.55},
+  {name:'Northam',        lat:-31.651, lon:116.667, dec:-1.10},
+  {name:'Merredin',       lat:-31.483, lon:118.276, dec:-0.65},
+  {name:'Kalgoorlie',     lat:-30.749, lon:121.465, dec:0.93},
+  {name:'Leonora',        lat:-28.887, lon:121.332, dec:1.05},
+  {name:'Laverton',       lat:-28.629, lon:122.412, dec:1.20},
+  {name:'Norseman',       lat:-32.197, lon:121.778, dec:0.40},
+  {name:'Geraldton',      lat:-28.778, lon:114.615, dec:6.72},
+  {name:'Mount Magnet',   lat:-28.060, lon:117.846, dec:1.95},
+  {name:'Meekatharra',    lat:-26.591, lon:118.490, dec:1.35},
+  {name:'Carnarvon',      lat:-24.882, lon:113.660, dec:1.80},
+  {name:'Exmouth',        lat:-21.939, lon:114.128, dec:1.30},
+  {name:'Karratha',       lat:-20.737, lon:116.846, dec:1.05},
+  {name:'Port Hedland',   lat:-20.312, lon:118.576, dec:1.00},
+  {name:'Newman',         lat:-23.357, lon:119.734, dec:1.16},
+  {name:'Tom Price',      lat:-22.688, lon:117.793, dec:1.10},
+  {name:'Paraburdoo',     lat:-23.205, lon:117.694, dec:1.12},
+  {name:'Marble Bar',     lat:-21.176, lon:119.745, dec:1.20},
+  {name:'Broome',         lat:-17.961, lon:122.236, dec:1.51},
+  {name:'Derby',          lat:-17.305, lon:123.622, dec:1.65},
+  {name:'Kununurra',      lat:-15.776, lon:128.739, dec:2.24},
+  {name:'Halls Creek',    lat:-18.230, lon:127.665, dec:1.95},
+  {name:'Wiluna',         lat:-26.605, lon:120.224, dec:1.45},
+  {name:'Warburton',      lat:-26.130, lon:126.588, dec:2.40},
+];
+
+function haversineKm(lat1,lon1,lat2,lon2){
+  const R=6371;
+  const toRad=d=>d*Math.PI/180;
+  const dLat=toRad(lat2-lat1), dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+
+function estimateDeclinationAt(lat, lon){
+  const withDist = WA_DECLINATION_TABLE.map(p => ({
+    ...p, dist: haversineKm(lat, lon, p.lat, p.lon)
+  })).sort((a,b) => a.dist - b.dist);
+
+  const nearest = withDist[0];
+  if(nearest.dist < 5) return { dec: nearest.dec, method: 'nearest', refs: [nearest] };
+
+  const top3 = withDist.slice(0, 3);
+  const weights = top3.map(p => 1 / Math.max(p.dist, 0.1));
+  const sumW = weights.reduce((a,b) => a+b, 0);
+  const dec = top3.reduce((sum,p,i) => sum + p.dec * weights[i], 0) / sumW;
+
+  return { dec, method: 'idw3', refs: top3 };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GEOMETRY ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+function parseBearing(raw) {
+  raw = raw.replace(/[°'"]/g,' ').trim();
+  const p = raw.split(/\s+/).filter(Boolean);
+  if (!p.length) throw new Error('Enter a bearing.');
+  if (p.length===1) return +p[0] % 360;
+  if (p.length===2) return (+p[0] + +p[1]/60) % 360;
+  return (+p[0] + +p[1]/60 + +p[2]/3600) % 360;
+}
+
+function addBrg(b,d){ return (b+d+360)%360 }
+
+function offsetPt(e,n,brg,dist){
+  const r=brg*Math.PI/180;
+  return [e+dist*Math.sin(r), n+dist*Math.cos(r)];
+}
+
+function dist2d(e1,n1,e2,n2){ return Math.hypot(e2-e1,n2-n1) }
+
+function brgBetween(e1,n1,e2,n2){
+  return (Math.atan2(e2-e1,n2-n1)*180/Math.PI+360)%360;
+}
+
+// Solve triangle from three sides (SSS) — returns all three angles in degrees
+function sss(a,b,c){
+  // a=opposite P1, b=opposite P2, c=opposite P3
+  // law of cosines: cos(A) = (b²+c²-a²)/(2bc)
+  const cosA = (b*b+c*c-a*a)/(2*b*c);
+  const cosB = (a*a+c*c-b*b)/(2*a*c);
+  const cosC = (a*a+b*b-c*c)/(2*a*b);
+  if(Math.abs(cosA)>1||Math.abs(cosB)>1||Math.abs(cosC)>1)
+    throw new Error('Triangle side lengths are impossible (violate triangle inequality).');
+  const A=Math.acos(cosA)*180/Math.PI;
+  const B=Math.acos(cosB)*180/Math.PI;
+  const C=Math.acos(cosC)*180/Math.PI;
+  return {A,B,C};
+}
+
+// QC status with granular thresholds
+function qcLabel(mm){
+  if(mm<=20)  return {s:'PASS (excellent)',cls:'pass',row:'row-pass',sym:'✔'};
+  if(mm<=50)  return {s:'PASS',           cls:'pass',row:'row-pass',sym:'✔'};
+  if(mm<=100) return {s:'MARGINAL',       cls:'marg',row:'row-marg',sym:'⚠'};
+  return              {s:'FAIL',          cls:'fail',row:'row-fail',sym:'✘'};
+}
+// Maps a qcLabel() result onto the .cbox ok/mg/fl modifier classes
+function cboxClsFromQc(qc){ return qc.cls==='fail'?'fl':qc.cls==='marg'?'mg':'ok'; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRIANGLE SOLVER
+// Inputs: e1,n1 (P1), trueB (P1→P2 bearing), d12,d23,d31 (three side lengths)
+// Method:
+//   - Place P2 via bearing + d12
+//   - Use SSS to find angle at P1 (between P1→P2 and P1→P3)
+//   - Place P3 via bearing (P1→P2 bearing + angle_at_P1) + d31
+//   - Verify P2→P3 distance matches d23
+// ═══════════════════════════════════════════════════════════════════════════
+function solveTriangle(e1,n1,trueB,d12,d23,d31,p3sign){
+  // p3sign: -1 = P3 left of P1→P2 (default), +1 = P3 right of P1→P2
+  const {A:angP1,B:angP2,C:angP3} = sss(d23,d31,d12);
+
+  const [e2,n2] = offsetPt(e1,n1,trueB,d12);
+
+  // Apply sign: negative rotates bearing left (CCW), positive rotates right (CW)
+  const brgP1P3 = addBrg(trueB, p3sign * angP1);
+  const [e3,n3] = offsetPt(e1,n1,brgP1P3,d31);
+
+  // Verification
+  const d23_check = dist2d(e2,n2,e3,n3);
+
+  return {
+    pts:[{name:'P1',e:e1,n:n1},{name:'P2',e:e2,n:n2},{name:'P3',e:e3,n:n3}],
+    angles:{P1:angP1,P2:angP2,P3:angP3},
+    brgs:{P1P2:trueB, P1P3:brgP1P3, P2P3:brgBetween(e2,n2,e3,n3),
+          P2P1:addBrg(trueB,180), P3P1:addBrg(brgP1P3,180), P3P2:brgBetween(e3,n3,e2,n2)},
+    checks:[
+      {label:'Side P1→P2', meas:dist2d(e1,n1,e2,n2), exp:d12},
+      {label:'Side P2→P3', meas:d23_check,            exp:d23},
+      {label:'Side P3→P1', meas:dist2d(e3,n3,e1,n1), exp:d31},
+    ],
+    perimeter: d12+d23+d31,
+    area: 0.5*Math.abs((e2-e1)*(n3-n1)-(e3-e1)*(n2-n1))
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// QUADRILATERAL SOLVER
+// Inputs: e1,n1, trueB, d12,d23,d34,d41 (four sides), d13 (fixing diagonal),
+//         d24 (optional check diagonal)
+// Method:
+//   - P2 from P1 via bearing + d12
+//   - Triangle P1-P2-P3: sides P1P2=d12, P2P3=d23, P1P3=d13 → find P3
+//   - Triangle P1-P3-P4: sides P1P3=d13, P3P4=d34, P4P1=d41 → find P4
+//   - Verify P4→P1 distance and optional diagonal P2→P4
+// ═══════════════════════════════════════════════════════════════════════════
+function solveQuad(e1,n1,trueB,d12,d23,d34,d41,d13,d24_meas,p3sign,p4sign){
+  // p3sign: -1=P3 left of P1→P2, +1=P3 right of P1→P2
+  // p4sign: -1=P4 left of P1→P3, +1=P4 right of P1→P3
+  const [e2,n2] = offsetPt(e1,n1,trueB,d12);
+
+  // ── Solve triangle P1-P2-P3 ──────────────────────────────────────────
+  const {A:a1_123, B:a2_123} = sss(d23,d13,d12);
+  const brgP1P3 = addBrg(trueB, p3sign * a1_123);
+  const [e3,n3] = offsetPt(e1,n1,brgP1P3,d13);
+
+  // ── Solve triangle P1-P3-P4 ──────────────────────────────────────────
+  const {A:a1_134, B:a3_134} = sss(d34,d41,d13);
+  const brgP1P4 = addBrg(brgP1P3, p4sign * a1_134);
+  const [e4,n4] = offsetPt(e1,n1,brgP1P4,d41);
+
+  // ── Checks ────────────────────────────────────────────────────────────
+  const d12_check = dist2d(e1,n1,e2,n2);
+  const d23_check = dist2d(e2,n2,e3,n3);
+  const d34_check = dist2d(e3,n3,e4,n4);
+  const d41_check = dist2d(e4,n4,e1,n1);
+  const d13_check = dist2d(e1,n1,e3,n3);
+  const d24_comp  = dist2d(e2,n2,e4,n4);
+
+  const checks = [
+    {label:'Side P1→P2',      meas:d12_check, exp:d12},
+    {label:'Side P2→P3',      meas:d23_check, exp:d23},
+    {label:'Side P3→P4',      meas:d34_check, exp:d34},
+    {label:'Side P4→P1',      meas:d41_check, exp:d41},
+    {label:'Diagonal P1→P3',  meas:d13_check, exp:d13},
+  ];
+
+  // If check diagonal was measured, compare computed vs measured
+  let d24_note = null;
+  if(d24_meas!==null){
+    const diff_mm = Math.abs(d24_comp-d24_meas)*1000;
+    checks.push({label:'Diagonal P2→P4 (check)', meas:d24_meas, exp:d24_comp});
+    d24_note = {computed:d24_comp, measured:d24_meas, diff_mm};
+  } else {
+    checks.push({label:'Diagonal P2→P4 (computed)', meas:d24_comp, exp:null, info:true});
+  }
+
+  const brgs = {
+    P1P2:trueB,          P2P1:addBrg(trueB,180),
+    P2P3:brgBetween(e2,n2,e3,n3), P3P2:brgBetween(e3,n3,e2,n2),
+    P3P4:brgBetween(e3,n3,e4,n4), P4P3:brgBetween(e4,n4,e3,n3),
+    P4P1:brgBetween(e4,n4,e1,n1), P1P4:brgBetween(e1,n1,e4,n4),
+    P1P3:brgP1P3,        P3P1:addBrg(brgP1P3,180),
+    P1P4:brgP1P4,        P4P1:addBrg(brgP1P4,180),
+    P2P4:brgBetween(e2,n2,e4,n4),  P4P2:brgBetween(e4,n4,e2,n2),
+  };
+
+  // Shoelace area
+  const area = 0.5*Math.abs(
+    (e1*(n2-n4)+e2*(n3-n1)+e3*(n4-n2)+e4*(n1-n3))
+  );
+
+  return {
+    pts:[{name:'P1',e:e1,n:n1},{name:'P2',e:e2,n:n2},
+         {name:'P3',e:e3,n:n3},{name:'P4',e:e4,n:n4}],
+    checks, brgs, d24_comp, d24_note,
+    perimeter:d12+d23+d34+d41, area
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ELEVATION ENGINE
+// ═══════════════════════════════════════════════════════════════════════════
+function getElevations(z1, nPts){
+  if(elevMode==='uniform') return {elevs: Array(nPts).fill(z1), closureInfo: null};
+
+  if(elevMode==='manual'){
+    const elevs=[z1];
+    for(let i=1;i<nPts;i++){
+      const el=document.getElementById(`man-z${i}`);
+      const v=parseFloat(el?.value);
+      if(isNaN(v)) throw new Error(`Enter elevation for P${i+1}.`);
+      elevs.push(v);
+    }
+    return {elevs, closureInfo: null};
+  }
+
+  // Abney
+  const abneyZ1=parseFloat(document.getElementById('abney-z1')?.value);
+  if(isNaN(abneyZ1)) throw new Error('Enter P1 elevation for Abney mode.');
+  const legs=[];
+  for(let i=0;i<nPts;i++){
+    const ang =abneyAngle(`ab-deg-${i}`,`ab-vmark-${i}`,`ab-vside-${i}`,`ab-sign-${i}`,i+1);
+    const dist=parseFloat(document.getElementById(`ab-dist-${i}`)?.value);
+    const rec =abneyAngle(`ab-rdeg-${i}`,`ab-rvmark-${i}`,`ab-rvside-${i}`,`ab-rsign-${i}`,i+1);
+    if(isNaN(ang)||isNaN(dist))
+      throw new Error(`Enter angle and distance for Abney leg ${i+1}.`);
+    let dh=dist*Math.sin(ang*Math.PI/180);
+    if(!isNaN(rec)) dh=(dh-dist*Math.sin(rec*Math.PI/180))/2;
+    legs.push(dh);
+  }
+  // Bowditch
+  const closure=legs.reduce((s,l)=>s+l,0);
+  const mm=Math.abs(closure)*1000;
+  if(mm>100 && !confirm(`Abney loop closure is ${mm.toFixed(0)} mm (>100 mm).\nProceed anyway?`))
+    throw new Error('Cancelled.');
+  const corr=-closure/nPts;  // nPts legs in the closed loop = nPts corrections
+  const elevs=[abneyZ1];
+  for(let i=0;i<nPts-1;i++) elevs.push(elevs[i]+legs[i]+corr);
+  // Persist the closure (not just react to it) so it survives into the QC
+  // tab and field book — previously this number was computed, used for the
+  // Bowditch correction, then discarded once the confirm() dialog closed.
+  const closureInfo = {closure_m: closure, mm, qc: qcLabel(mm)};
+  return {elevs, closureInfo};
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DECLINATION ESTIMATION UI HANDLER
+// ═══════════════════════════════════════════════════════════════════════════
+function estimateDeclination(){
+  const noteEl = document.getElementById('dec-estimate-note');
+  if(!navigator.geolocation){
+    if(noteEl) noteEl.innerHTML = '<span style="color:var(--red)">Geolocation not supported on this device.</span>';
+    return;
+  }
+  if(noteEl) noteEl.innerHTML = '<span style="color:var(--sub)">Reading GPS position...</span>';
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      const result = estimateDeclinationAt(lat, lon);
+      const decField = document.getElementById('dec');
+      decField.value = result.dec.toFixed(2);
+      updateLiveBearing();
+
+      const accM = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null;
+      let methodNote;
+      if(result.method === 'nearest'){
+        methodNote = 'Nearest reference: ' + result.refs[0].name + ' (' + result.refs[0].dist.toFixed(0) + ' km away)';
+      } else {
+        const names = result.refs.map(r => r.name + ' (' + r.dist.toFixed(0) + 'km)').join(', ');
+        methodNote = 'Interpolated from: ' + names;
+      }
+      if(noteEl) noteEl.innerHTML =
+        '<span style="color:var(--green)">' + result.dec.toFixed(2) + '\u00B0 estimated' +
+        (accM ? ' (GPS accuracy \u00B1' + accM + 'm)' : '') + '</span><br>' +
+        '<span style="color:var(--sub)">' + methodNote + '. Offline WA lookup \u2014 verify online if available. Editable.</span>';
+    },
+    err => {
+      let msg = 'Could not get GPS position.';
+      if(err.code === err.PERMISSION_DENIED) msg = 'Location permission denied. Enable it in browser settings, or enter declination manually.';
+      else if(err.code === err.POSITION_UNAVAILABLE) msg = 'Position unavailable (no GPS signal). Try again outdoors, or enter manually.';
+      else if(err.code === err.TIMEOUT) msg = 'GPS timed out. Try again, or enter declination manually.';
+      if(noteEl) noteEl.innerHTML = '<span style="color:var(--red)">' + msg + '</span>';
+    },
+    { enableHighAccuracy:true, timeout:15000, maximumAge:60000 }
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HORIZONTAL DISTANCE HELPER (Abney mode)
+// ═══════════════════════════════════════════════════════════════════════════
+// Returns array of horizontal distances derived from Abney slope distances
+// and angles: horiz = slope * cos(angle_decimal)
+function getHorizFromAbney(n){
+  const horizs=[];
+  for(let i=0;i<n;i++){
+    const ang  = abneyAngle(`ab-deg-${i}`,`ab-vmark-${i}`,`ab-vside-${i}`,`ab-sign-${i}`,i+1);
+    const slope= parseFloat(el(`ab-dist-${i}`)?.value);
+    if(isNaN(ang))   throw new Error(`Enter Abney angle for leg ${i+1}.`);
+    if(isNaN(slope)||slope<=0) throw new Error(`Enter slope distance for Abney leg ${i+1}.`);
+    const horiz = slope * Math.cos(ang * Math.PI / 180);
+    if(horiz<=0) throw new Error(`Computed horizontal distance for leg ${i+1} is zero or negative — check angle.`);
+    horizs.push(horiz);
+  }
+  return horizs;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+function getNum(id){ return parseFloat(document.getElementById(id)?.value) }
+function getStr(id){ return (document.getElementById(id)?.value||'').trim() }
+function el(id)    { return document.getElementById(id) }
+
+function saveOrientState(){
+  const p3 =document.querySelector('input[name="p3-side"]:checked');
+  const p3q=document.querySelector('input[name="p3q-side"]:checked');
+  const p4 =document.querySelector('input[name="p4-side"]:checked');
+  if(p3)  orientState.p3side  = p3.value;
+  if(p3q) orientState.p3qside = p3q.value;
+  if(p4)  orientState.p4side  = p4.value;
+}
+function restoreOrientState(){
+  const r=(name,val)=>{
+    const el2=document.querySelector(`input[name="${name}"][value="${val}"]`);
+    if(el2) el2.checked=true;
+  };
+  r('p3-side', orientState.p3side);
+  r('p3q-side',orientState.p3qside);
+  r('p4-side', orientState.p4side);
+}
+function setMode(m){
+  saveOrientState();
+  surveyMode=m;
+  el('btn-tri') .classList.toggle('active',m==='tri');
+  el('btn-quad').classList.toggle('active',m==='quad');
+  el('tri-dists') .style.display=m==='tri' ?'':'none';
+  el('quad-dists').style.display=m==='quad'?'':'none';
+  el('mode-desc').textContent = m==='tri'
+    ? 'Three pegs. One bearing (P1→P2) + three side distances fix the shape. No right angles required.'
+    : 'Four pegs. One bearing (P1→P2) + four sides + one diagonal (P1→P3) fix the shape. P2→P4 diagonal is an optional independent check.';
+  rebuildElevFields();
+  restoreOrientState();
+}
+
+function onElevMode(v){
+  elevMode=v;
+  el('elev-manual').style.display=v==='manual'?'':'none';
+  el('elev-abney') .style.display=v==='abney' ?'':'none';
+  // Hide horizontal distance inputs when Abney mode is active
+  // (Abney section provides slope distances; conversion is done internally)
+  const hideHoriz = v==='abney';
+  const triH  = el('tri-horiz-dists');
+  const quadH = el('quad-horiz-dists');
+  const hint  = el('dist-hint');
+  if(triH)  triH .style.display = hideHoriz ? 'none' : '';
+  if(quadH) quadH.style.display = hideHoriz ? 'none' : '';
+  if(hint){
+    hint.innerHTML = hideHoriz
+      ? '<b style="color:var(--amber)">Abney mode active</b> — enter slope distances in the Abney section below. Horizontal distances are derived automatically.'
+      : 'Enter <b style="color:var(--text)">horizontal</b> distances (taped horizontal, or break-tape method on slopes). On steep ground use Abney mode — enter slope distances there and the app converts to horizontal automatically.';
+  }
+  rebuildElevFields();
+}
+
+function nPts(){ return surveyMode==='tri'?3:4 }
+
+function rebuildElevFields(){
+  const n=nPts();
+  const pts=surveyMode==='tri'?['P1','P2','P3']:['P1','P2','P3','P4'];
+
+  // Manual fields (P2 onwards)
+  let mHtml='';
+  for(let i=1;i<n;i++){
+    mHtml+=`<div class="grid2" style="margin-bottom:8px">
+      <div class="field"><label>${pts[i]} Elevation (m)</label>
+        <input type="number" id="man-z${i}" step=".001" placeholder="e.g. 42.150" inputmode="decimal"></div>
+      <div class="field"><label>Source / note</label>
+        <input type="text" id="man-note${i}" placeholder="e.g. water level"
+               style="font-size:.82rem"></div>
+    </div>`;
+  }
+  el('elev-manual-fields').innerHTML=mHtml;
+
+  // ── Abney fields ─────────────────────────────────────────────────────────
+  // Legs follow the same sequence as the side distances already entered.
+  // Distance fields are auto-filled from the Field Measurements section.
+  // Angle is entered as degrees + minutes (separate fields) to avoid decimal conversion.
+
+  const legLabels=[];
+  for(let i=0;i<n;i++) legLabels.push(`${pts[i]}→${pts[(i+1)%n]}`);
+
+  // Map each leg index to the corresponding distance field ID
+  const distIds = surveyMode==='tri'
+    ? ['d12','d23-tri','d31']
+    : ['d12q','d23q','d34','d41'];
+
+  // Build P1 base elevation field + one block per leg
+  let aHtml=`<div class="field" style="margin-bottom:10px">
+    <label>P1 base elevation (m) <span>from GPS averaging</span></label>
+    <input type="number" id="abney-z1" step=".001" inputmode="decimal"
+           placeholder="e.g. 42.150"
+           oninput="this.dataset.userEdited=this.value?'1':'';updateAbneyPreview()">
+  </div>`;
+
+  for(let i=0;i<n;i++){
+    // Read auto-fill distance from the corresponding Field Measurements field
+    const autoDistId=distIds[i];
+    aHtml+=`
+    <div style="border:1px solid var(--border);border-radius:var(--r);padding:12px;
+                margin-bottom:10px;background:var(--surface2)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+        <span style="font-weight:700;font-size:.88rem;color:var(--blue);letter-spacing:.02em">${legLabels[i]}</span>
+        <span style="font-family:var(--mono);font-size:.85rem;color:var(--sub)">
+          Δh&nbsp;<b id="ab-dh-${i}" style="color:var(--text)">—</b></span>
+      </div>
+
+      <div class="field" style="margin-bottom:8px">
+        <label>Direction</label>
+        <div class="rb-group">
+          <input type="radio" name="ab-sign-${i}" id="ab-sign-${i}-up" value="1" onchange="updateAbneyPreview()">
+          <label for="ab-sign-${i}-up">▲ Up</label>
+          <input type="radio" name="ab-sign-${i}" id="ab-sign-${i}-dn" value="-1" onchange="updateAbneyPreview()">
+          <label for="ab-sign-${i}-dn">▼ Down</label>
+        </div>
+      </div>
+      <div class="grid3">
+        <div class="field" style="margin-bottom:0"><label>Slope (m)</label>
+          <input type="number" id="ab-dist-${i}" step=".001" inputmode="decimal"
+              title="Slope distance — auto-filled from Field Measurements if available, or enter directly"
+              oninput="el(this.id).dataset.userEdited=this.value?'1':'';updateAbneyPreview()"
+              value="" placeholder="m"
+              data-autofill="${autoDistId}"></div>
+        <div class="field" style="margin-bottom:0"><label>Degrees</label>
+          <input type="number" id="ab-deg-${i}" step="1" min="0" max="90" placeholder="0–90"
+              inputmode="numeric" title="Degrees, 0–90 (always positive — use Direction above for uphill/downhill)"
+              oninput="updateAbneyPreview()"></div>
+        <div class="field" style="margin-bottom:0"><label>Vernier mark</label>
+          <select id="ab-vmark-${i}" title="Which vernier graduation aligned with a degree mark"
+              onchange="updateAbneyPreview()">
+            <option value="" selected disabled>Mark…</option>
+            <option value="0">0′ (exact)</option>
+            <option value="10">10′</option>
+            <option value="20">20′</option>
+            <option value="30">30′</option>
+            <option value="40">40′</option>
+            <option value="50">50′</option>
+          </select></div>
+      </div>
+      <div class="field" style="margin-bottom:0;margin-top:8px">
+        <label>Vernier side <span>not needed if mark is exactly 0′</span></label>
+        <div class="rb-group">
+          <input type="radio" name="ab-vside-${i}" id="ab-vside-${i}-l" value="left" onchange="updateAbneyPreview()">
+          <label for="ab-vside-${i}-l">◀ Left</label>
+          <input type="radio" name="ab-vside-${i}" id="ab-vside-${i}-r" value="right" onchange="updateAbneyPreview()">
+          <label for="ab-vside-${i}-r">Right ▶</label>
+        </div>
+      </div>
+
+      <details style="margin-top:10px">
+        <summary style="font-size:.78rem;color:var(--blue);font-weight:600;cursor:pointer;
+                         padding:4px 0;-webkit-tap-highlight-color:transparent">
+          Reciprocal reading (optional)
+        </summary>
+        <div style="margin-top:8px">
+          <div class="field" style="margin-bottom:8px">
+            <label>Direction</label>
+            <div class="rb-group">
+              <input type="radio" name="ab-rsign-${i}" id="ab-rsign-${i}-up" value="1" onchange="updateAbneyPreview()">
+              <label for="ab-rsign-${i}-up">▲ Up</label>
+              <input type="radio" name="ab-rsign-${i}" id="ab-rsign-${i}-dn" value="-1" onchange="updateAbneyPreview()">
+              <label for="ab-rsign-${i}-dn">▼ Down</label>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field" style="margin-bottom:0"><label>Degrees</label>
+              <input type="number" id="ab-rdeg-${i}" step="1" min="0" max="90" placeholder="0–90"
+                  inputmode="numeric" title="Reciprocal degrees, 0–90 (always positive)"
+                  oninput="updateAbneyPreview()"></div>
+            <div class="field" style="margin-bottom:0"><label>Vernier mark</label>
+              <select id="ab-rvmark-${i}" title="Which vernier graduation aligned with a degree mark"
+                  onchange="updateAbneyPreview()">
+                <option value="" selected disabled>Mark…</option>
+                <option value="0">0′ (exact)</option>
+                <option value="10">10′</option>
+                <option value="20">20′</option>
+                <option value="30">30′</option>
+                <option value="40">40′</option>
+                <option value="50">50′</option>
+              </select></div>
+          </div>
+          <div class="field" style="margin-bottom:0;margin-top:8px">
+            <label>Vernier side <span>not needed if mark is exactly 0′</span></label>
+            <div class="rb-group">
+              <input type="radio" name="ab-rvside-${i}" id="ab-rvside-${i}-l" value="left" onchange="updateAbneyPreview()">
+              <label for="ab-rvside-${i}-l">◀ Left</label>
+              <input type="radio" name="ab-rvside-${i}" id="ab-rvside-${i}-r" value="right" onchange="updateAbneyPreview()">
+              <label for="ab-rvside-${i}-r">Right ▶</label>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>`;
+  }
+  aHtml+=`<div class="hint" style="margin-top:2px">
+    Enter <b>slope distances</b> — the app converts to horizontal for the geometry solver.
+    Auto-filled from Field Measurements if available; edit freely.
+    Read the whole degree at the index line, then pick the <b>vernier mark</b> that
+    coincides with a degree graduation — if it's not exactly 0′, also select which
+    side it fell on; the app works out whether to add or subtract for you.
+    Separately, select <b style="color:var(--green)">▲ Up</b> or <b style="color:var(--red)">▼ Down</b>
+    for every leg you fill in — direction isn't something the vernier reading can tell you.
+  </div>`;
+  el('elev-abney-fields').innerHTML=aHtml;
+
+  // Auto-fill distances now that fields are in the DOM
+  syncAbneyDistances();
+}
+
+// Called whenever field measurement distances or P1 elevation change, and on
+// mode switch. In Abney mode, copies field measurement values as a starting
+// point for slope distances, and copies P1 Elevation as the base elevation.
+// User edits lock the field against further auto-fill (data-userEdited flag).
+// Robust: silently skips if Abney fields don't exist yet.
+function syncAbneyDistances(){
+  if(elevMode!=='abney') return;
+  const n=nPts();
+  const distIds = surveyMode==='tri'
+    ? ['d12','d23-tri','d31']
+    : ['d12q','d23q','d34','d41'];
+  let anyDst=false;
+  for(let i=0;i<n;i++){
+    const srcEl=el(distIds[i]);
+    const dstEl=el(`ab-dist-${i}`);
+    if(!dstEl) continue;  // fields not built yet — bail gracefully
+    anyDst=true;
+    if(srcEl&&srcEl.value && dstEl.dataset.userEdited!=='1'){
+      dstEl.value=srcEl.value;
+    }
+  }
+  // Auto-fill P1 base elevation from the GPS Anchor elevation field (z1)
+  const z1El=el('z1');
+  const abneyZ1El=el('abney-z1');
+  if(z1El&&abneyZ1El&&z1El.value&&abneyZ1El.dataset.userEdited!=='1'){
+    abneyZ1El.value=z1El.value;
+  }
+  if(anyDst) updateAbneyPreview();
+}
+
+// Resolves a raw vernier reading (which graduation aligned, and which side of
+// the index/zero it fell on) into the correct minutes (0–59) to add to the
+// lower whole degree. This is the side-dependent arithmetic from the field
+// guide's vernier table: right-side marks add directly; left-side marks are
+// (60 − mark). Exact 0′ alignment has no side ambiguity.
+function vernierMinutes(markId, sideGroup, legNum){
+  const markRaw=el(markId)?.value;
+  if(markRaw===undefined || markRaw==='')
+    throw new Error(`Leg ${legNum}: select the vernier mark (0–50′) that aligned with a degree graduation.`);
+  const mark=parseInt(markRaw,10);
+  if(mark===0) return 0;
+  const sideEl=document.querySelector(`input[name="${sideGroup}"]:checked`);
+  if(!sideEl)
+    throw new Error(`Leg ${legNum}: select which side (Left/Right) the ${mark}′ vernier mark fell on.`);
+  return sideEl.value==='right' ? mark : (60-mark);
+}
+
+function abneyAngle(degId, markId, sideGroup, signGroup, legNum){
+  // Magnitude (degrees + minutes) comes from the field-resolved vernier
+  // reading and must always be entered as positive. Direction (elevation
+  // vs depression) is carried ONLY by the explicit Up/Down radio pair —
+  // never inferred from the sign of the degrees value, because that
+  // inference silently fails for any reading whose whole-degree part is 0
+  // (e.g. 0°15′ below horizontal), since JS can't distinguish 0 from −0.
+  const d=parseFloat(el(degId)?.value);
+  if(isNaN(d)) return NaN;
+  if(d<0)
+    throw new Error(`Leg ${legNum}: enter degrees as a positive value (0–90). Use the Up/Down selector to set direction — don't use a minus sign.`);
+  const m=vernierMinutes(markId, sideGroup, legNum);
+  const checked=document.querySelector(`input[name="${signGroup}"]:checked`);
+  const signVal=checked?checked.value:null;
+  if(signVal!=='1' && signVal!=='-1')
+    throw new Error(`Leg ${legNum}: select Up or Down for the angle before calculating.`);
+  return (signVal==='1'?1:-1) * (d + m/60);
+}
+
+function updateAbneyPreview(){
+  const n=nPts();
+  let legs=[], allFilled=true;
+  for(let i=0;i<n;i++){
+    const dhEl=el(`ab-dh-${i}`);
+    let ang, dist, rec;
+    try{
+      ang =abneyAngle(`ab-deg-${i}`,`ab-vmark-${i}`,`ab-vside-${i}`,`ab-sign-${i}`,i+1);
+      dist=parseFloat(el(`ab-dist-${i}`)?.value);
+      rec =abneyAngle(`ab-rdeg-${i}`,`ab-rvmark-${i}`,`ab-rvside-${i}`,`ab-rsign-${i}`,i+1);
+    }catch(err){
+      if(dhEl){dhEl.textContent='set ▲/▼';dhEl.style.color='var(--red)'}
+      allFilled=false; legs.push(null); continue;
+    }
+    if(isNaN(ang)||isNaN(dist)){
+      if(dhEl){dhEl.textContent='—';dhEl.style.color='var(--sub)'}
+      allFilled=false; legs.push(null); continue;
+    }
+    let dh=dist*Math.sin(ang*Math.PI/180);
+    if(!isNaN(rec)) dh=(dh-dist*Math.sin(rec*Math.PI/180))/2;
+    if(dhEl){
+      dhEl.textContent=(dh>=0?'+':'')+dh.toFixed(3);
+      dhEl.style.color=dh>0.001?'var(--green)':dh<-0.001?'var(--red)':'var(--text)';
+    }
+    legs.push(dh);
+  }
+  const prev=el('abney-closure-preview');
+  if(!prev) return;
+  if(!allFilled||legs.some(l=>l===null)){prev.innerHTML='';return;}
+  const closure=legs.reduce((s,l)=>s+l,0);
+  const mm=Math.abs(closure)*1000;
+  const cls=mm<=50?'ok':mm<=100?'mg':'fl';
+  const sym=mm<=50?'✔':mm<=100?'⚠':'✘';
+  prev.innerHTML=`<div class="cbox ${cls}">
+    <div class="cl">Loop closure preview (Σ Δh)</div>
+    <div class="cv">${sym}  ${closure>=0?'+':''}${closure.toFixed(3)} m  (${mm.toFixed(0)} mm)</div>
+  </div>`;
+}
+
+function updateLiveBearing(){
+  try{
+    const dec=parseFloat(el('dec').value)||0;
+    const brg=parseBearing(el('brg').value);
+    const tb=(brg+dec+360)%360;
+    el('live-bearing').textContent=`→ True: ${tb.toFixed(2)}°T`;
+  }catch{el('live-bearing').textContent='';}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CALCULATE
+// ═══════════════════════════════════════════════════════════════════════════
+function calculate(){
+  try{
+    // ── Validate and read GPS anchor ──
+    const e1=getNum('e1'), n1=getNum('n1'), z1=getNum('z1');
+    if(isNaN(e1))        throw new Error('⚠ Enter P1 Easting (MGA2020 UTM).');
+    if(isNaN(n1))        throw new Error('⚠ Enter P1 Northing (MGA2020 UTM).');
+    if(e1<=0)            throw new Error('⚠ P1 Easting must be a positive MGA2020 value (e.g. 394820).');
+    if(n1<=0)            throw new Error('⚠ P1 Northing must be a positive MGA2020 value (e.g. 6458312).');
+    if(isNaN(z1))        throw new Error('⚠ Enter P1 Elevation (enter 0 if unknown).');
+
+    // ── Validate and read declination ──
+    const decRaw=el('dec').value.trim();
+    if(!decRaw)          throw new Error('⚠ Enter magnetic declination (Perth ≈ 1.5° E).');
+    const dec=parseFloat(decRaw);
+    if(isNaN(dec))       throw new Error('⚠ Declination must be a number (e.g. 1.5 for Perth).');
+    if(dec<-30||dec>30)  throw new Error('⚠ Declination outside plausible range (−30° to +30°).');
+
+    // ── Validate and read bearing ──
+    const brgRaw=el('brg').value.trim();
+    if(!brgRaw)          throw new Error('⚠ Enter the compass bearing from P1 toward P2.');
+    let magBrg;
+    try{ magBrg=parseBearing(brgRaw); }
+    catch{ throw new Error('⚠ Could not parse bearing — enter as degrees (e.g. 045) or degrees minutes seconds (e.g. 045 30 15).'); }
+    const trueB=(magBrg+dec+360)%360;
+
+    const site=getStr('site-name')||'(unnamed)';
+    const surveyor=getStr('surveyor-name')||'(not recorded)';
+    const surveyDate=el('survey-date')?.value||'';
+    let geo, elevs, elevClosure;
+
+    if(surveyMode==='tri'){
+      let d12, d23, d31;
+      if(elevMode==='abney'){
+        // Derive horizontal distances from Abney slope distances + angles
+        [d12,d23,d31] = getHorizFromAbney(3);
+      } else {
+        d12=getNum('d12'); d23=getNum('d23-tri'); d31=getNum('d31');
+      }
+      if(isNaN(d12)||d12<=0) throw new Error('Enter distance P1→P2.');
+      if(isNaN(d23)||d23<=0) throw new Error('Enter distance P2→P3.');
+      if(isNaN(d31)||d31<=0) throw new Error('Enter distance P3→P1.');
+      if(d12>=d23+d31||d23>=d12+d31||d31>=d12+d23)
+        throw new Error('Triangle inequality violated: one side is longer than the sum of the other two.');
+      const p3sign = document.querySelector('input[name="p3-side"]:checked').value==='left' ? -1 : +1;
+      geo=solveTriangle(e1,n1,trueB,d12,d23,d31,p3sign);
+      ({elevs, closureInfo:elevClosure}=getElevations(z1,3));
+    } else {
+      let d12, d23, d34, d41;
+      if(elevMode==='abney'){
+        [d12,d23,d34,d41] = getHorizFromAbney(4);
+      } else {
+        d12=getNum('d12q'); d23=getNum('d23q');
+        d34=getNum('d34');  d41=getNum('d41');
+      }
+      const d13=getNum('d13');
+      const d24_raw=getNum('d24');
+      if(isNaN(d12)||d12<=0) throw new Error('Enter distance P1→P2.');
+      if(isNaN(d23)||d23<=0) throw new Error('Enter distance P2→P3.');
+      if(isNaN(d34)||d34<=0) throw new Error('Enter distance P3→P4.');
+      if(isNaN(d41)||d41<=0) throw new Error('Enter distance P4→P1.');
+      if(isNaN(d13)||d13<=0) throw new Error('Enter fixing diagonal P1→P3 (required for quadrilateral).');
+      if(d12>=d13+d23||d23>=d12+d13||d13>=d12+d23)
+        throw new Error('Triangle P1-P2-P3 (sides P1P2, P2P3, P1P3) violates triangle inequality.');
+      if(d13>=d34+d41||d34>=d13+d41||d41>=d13+d34)
+        throw new Error('Triangle P1-P3-P4 (sides P1P3, P3P4, P4P1) violates triangle inequality.');
+      const d24_meas=isNaN(d24_raw)?null:d24_raw;
+      const p3qsign = document.querySelector('input[name="p3q-side"]:checked').value==='left' ? -1 : +1;
+      const p4sign  = document.querySelector('input[name="p4-side"]:checked').value==='left'  ? -1 : +1;
+      geo=solveQuad(e1,n1,trueB,d12,d23,d34,d41,d13,d24_meas,p3qsign,p4sign);
+      ({elevs, closureInfo:elevClosure}=getElevations(z1,4));
+    }
+
+    // Attach elevations and elevation source label
+    const em=elevMode;
+    const eSrc=em==='abney'?'Abney (slope→horiz)':em==='manual'?'manual entry':'uniform';
+    geo.pts.forEach((p,i)=>{
+      p.z=elevs[i];
+      p.src=i===0?'GPS averaged':`calculated (${eSrc})`;
+    });
+
+    // Finalise QC statuses
+    geo.checks.forEach(c=>{
+      if(c.info) return; // computed-only row, no QC
+      c.diff=c.meas-c.exp;
+      c.qc=qcLabel(Math.abs(c.diff)*1000);
+    });
+
+    lastResult={geo, surveyMode, site, surveyor, surveyDate,
+                trueB, magBrg, dec,
+                elevMode:em, elevClosure};
+
+    renderAll();
+    showTab('coords');
+    toast('✔  Calculation complete');
+
+  }catch(e){
+    alert('Error: '+e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════════════════
+function renderAll(){
+  renderCoords();
+  renderQC();
+  renderBearings();
+  renderPlan();
+  renderExport();
+}
+
+function fN(v,dp=3){ return v.toFixed(dp) }
+function brgStr(b){ return b.toFixed(2)+'°T' }
+
+function renderCoords(){
+  const {geo}=lastResult;
+  let h=`<div style="overflow-x:auto"><table class="rtable">
+    <tr><th>Point</th><th>Easting (m)</th><th>Northing (m)</th><th>Elevation (m)</th><th>Source</th></tr>`;
+  geo.pts.forEach((p,i)=>{
+    h+=`<tr class="${i===0?'p1':''}">
+      <td>${p.name}</td><td class="r">${fN(p.e)}</td>
+      <td class="r">${fN(p.n)}</td><td class="r">${fN(p.z)}</td>
+      <td style="color:var(--sub);font-size:.78rem">${p.src}</td></tr>`;
+  });
+  h+=`</table></div>`;
+  // Area / perimeter summary
+  h+=`<div style="font-size:.82rem;color:var(--sub);margin-top:10px;line-height:1.8">
+    Perimeter: <b style="color:var(--text)">${fN(geo.perimeter)} m</b>
+    &nbsp;|&nbsp; Area: <b style="color:var(--text)">${fN(geo.area,1)} m²</b>
+    &nbsp;(${fN(geo.area/10000,4)} ha)
+  </div>`;
+  el('coords-out').innerHTML=h;
+}
+
+function renderQC(){
+  const {geo,surveyMode:sm,elevClosure}=lastResult;
+  let h='';
+
+  // ── Solver verification ─────────────────────────────────────────────────
+  // These checks confirm the geometry solver correctly reconstructed the
+  // side lengths/diagonal that were entered. They are NOT an independent
+  // check on the fieldwork: every value here was used directly to build the
+  // geometry, so (for triangle mode, all three; for quad mode, all but the
+  // optional P2→P4 diagonal) they are mathematically guaranteed to come back
+  // near-zero regardless of measurement quality. Genuinely independent
+  // checks — ones based on a measurement never fed into the solver — are
+  // shown separately below.
+  h+=`<div class="sh">Solver Verification</div>`;
+  h+=`<div class="hint" style="margin-bottom:8px">
+    Confirms the calculation correctly reconstructed the side lengths (and
+    fixing diagonal) you entered. This is a sanity check on the math, not an
+    independent check on your fieldwork — every value below was used directly
+    to build the geometry, so it will read PASS by construction even if a
+    field measurement was wrong. Real field-quality checks are below.
+  </div>`;
+
+  h+=`<div style="overflow-x:auto"><table class="rtable">
+    <tr><th>Measurement</th><th>Measured / computed (m)</th><th>Expected (m)</th>
+        <th>Diff (mm)</th><th>Status</th></tr>`;
+
+  geo.checks.forEach(c=>{
+    if(c.info){
+      // Computed-only diagonal — just display, no QC
+      h+=`<tr><td>${c.label}</td><td class="r">${fN(c.meas)}</td>
+          <td class="r" style="color:var(--sub)">—</td>
+          <td class="r" style="color:var(--sub)">—</td>
+          <td style="color:var(--sub)">computed</td></tr>`;
+      return;
+    }
+    const mm=Math.abs(c.diff)*1000;
+    h+=`<tr class="${c.qc.row}">
+      <td>${c.label}</td><td class="r">${fN(c.meas)}</td>
+      <td class="r">${fN(c.exp)}</td>
+      <td class="r">${mm.toFixed(1)}</td>
+      <td class="${c.qc.cls}">${c.qc.sym} ${c.qc.s}</td></tr>`;
+  });
+  h+='</table></div>';
+
+  // ── Independent field checks ────────────────────────────────────────────
+  // Unlike the table above, each entry here is compared against a
+  // measurement that was never used to build the geometry — a genuine,
+  // redundant cross-check on field measurement quality.
+  h+=`<div class="sh" style="margin-top:20px">Independent Field Checks</div>`;
+  h+=`<div class="hint" style="margin-bottom:8px">
+    Unlike the solver-verification table above, each check here compares a
+    value against a separate measurement that was never used to build the
+    geometry — this is the part that actually tells you something about
+    field measurement quality.
+  </div>`;
+
+  let hadIndependentCheck=false;
+
+  if(sm==='quad' && geo.d24_note){
+    hadIndependentCheck=true;
+    const dn=geo.d24_note;
+    const qc=qcLabel(dn.diff_mm);
+    h+=`<div class="cbox ${cboxClsFromQc(qc)}" style="margin-bottom:10px">
+      <div class="cl">Check diagonal P2→P4</div>
+      <div class="cv">${qc.sym}  Measured ${fN(dn.measured)} m  vs  Computed ${fN(dn.computed)} m
+          &nbsp; (${dn.diff_mm.toFixed(0)} mm) — ${qc.s}</div>
+      <div class="cn">Never used to build the geometry — a genuine cross-check.</div>
+    </div>`;
+  }
+
+  if(elevClosure){
+    hadIndependentCheck=true;
+    const {closure_m,mm,qc}=elevClosure;
+    h+=`<div class="cbox ${cboxClsFromQc(qc)}">
+      <div class="cl">Abney elevation loop closure (Σ Δh)</div>
+      <div class="cv">${qc.sym}  ${closure_m>=0?'+':''}${closure_m.toFixed(3)} m
+          &nbsp; (${mm.toFixed(0)} mm) — ${qc.s}</div>
+      <div class="cn">Sum of all leg elevation changes around the closed loop —
+          should return to zero. Bowditch-corrected before being applied to
+          point elevations.</div>
+    </div>`;
+  }
+
+  if(!hadIndependentCheck){
+    h+=`<div class="hint">
+      No independent checks were available for this survey. The optional
+      P2→P4 check diagonal (quadrilateral mode) and Abney/clinometer
+      elevations both provide a genuine, redundant cross-check — consider
+      using one of them if field-quality verification matters here.
+    </div>`;
+  }
+
+  el('qc-out').innerHTML=h;
+}
+
+function renderBearings(){
+  const {geo,surveyMode:sm,trueB,magBrg,dec}=lastResult;
+  const li=(lbl,val)=>`<li><span class="lbl">${lbl}</span><span class="val">${val}</span></li>`;
+  let h=`<ul class="blist">
+    ${li('Compass bearing P1→P2 (magnetic)',magBrg.toFixed(2)+'°M')}
+    ${li('Magnetic declination',dec>=0?'+'+dec.toFixed(1)+'° E':dec.toFixed(1)+'° W')}
+    ${li('True bearing P1→P2',brgStr(trueB))}`;
+
+  if(sm==='tri'){
+    const b=geo.brgs;
+    h+=li('True bearing P2→P3',brgStr(b.P2P3));
+    h+=li('True bearing P3→P1',brgStr(b.P3P1));
+    h+=`</ul>`;
+    h+=`<div class="sh" style="margin-top:16px">Triangle Angles</div><ul class="blist">`;
+    h+=li('Angle at P1',geo.angles.P1.toFixed(3)+'°');
+    h+=li('Angle at P2',geo.angles.P2.toFixed(3)+'°');
+    h+=li('Angle at P3',geo.angles.P3.toFixed(3)+'°');
+    h+=li('Sum of angles',(geo.angles.P1+geo.angles.P2+geo.angles.P3).toFixed(3)+'° (should be 180.000°)');
+  } else {
+    const b=geo.brgs;
+    h+=li('True bearing P1→P2',brgStr(trueB));
+    h+=li('True bearing P2→P1 (back)',brgStr(b.P2P1));
+    h+=li('True bearing P2→P3',brgStr(b.P2P3));
+    h+=li('True bearing P3→P2 (back)',brgStr(b.P3P2));
+    h+=li('True bearing P3→P4',brgStr(b.P3P4));
+    h+=li('True bearing P4→P3 (back)',brgStr(b.P4P3));
+    h+=li('True bearing P4→P1',brgStr(b.P4P1));
+    h+=li('True bearing P1→P4 (back)',brgStr(b.P1P4));
+    h+=`</ul><div class="sh" style="margin-top:16px">Diagonals</div><ul class="blist">`;
+    h+=li('Diagonal bearing P1→P3',brgStr(b.P1P3));
+    h+=li('Diagonal bearing P3→P1 (back)',brgStr(b.P3P1));
+    h+=li('Diagonal bearing P2→P4',brgStr(b.P2P4));
+    h+=li('Diagonal bearing P4→P2 (back)',brgStr(b.P4P2));
+  }
+  h+='</ul>';
+  el('bearings-out').innerHTML=h;
+}
+
+function renderPlan(){
+  const canvas=el('plan-canvas');
+  const ctx=canvas.getContext('2d');
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.clientWidth*dpr, H=canvas.clientHeight*dpr;
+  canvas.width=W; canvas.height=H;
+  ctx.scale(dpr,dpr);
+  const cW=canvas.clientWidth, cH=canvas.clientHeight;
+
+  ctx.fillStyle='#d0d0c0'; ctx.fillRect(0,0,cW,cH);
+
+  const pts=lastResult.geo.pts;
+  const es=pts.map(p=>p.e), ns=pts.map(p=>p.n);
+  const eMin=Math.min(...es),eMax=Math.max(...es);
+  const nMin=Math.min(...ns),nMax=Math.max(...ns);
+  const pad=56;
+  const sc=Math.min((cW-2*pad)/Math.max(eMax-eMin,1),(cH-2*pad)/Math.max(nMax-nMin,1));
+
+  const sx=e=>(pad+(e-eMin)*sc+(cW-2*pad-(eMax-eMin)*sc)/2);
+  const sy=n=>(cH-pad-(n-nMin)*sc-(cH-2*pad-(nMax-nMin)*sc)/2);
+
+  // Faint grid
+  ctx.strokeStyle='#aaaaaa'; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const x=pad+i*(cW-2*pad)/4, y=pad+i*(cH-2*pad)/4;
+    ctx.beginPath();ctx.moveTo(x,pad);ctx.lineTo(x,cH-pad);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(cW-pad,y);ctx.stroke();
+  }
+
+  const spts=pts.map(p=>({x:sx(p.e),y:sy(p.n),name:p.name}));
+
+  // Fill polygon
+  ctx.beginPath();ctx.moveTo(spts[0].x,spts[0].y);
+  spts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.closePath();
+  ctx.fillStyle='rgba(26,42,74,0.12)';ctx.fill();
+
+  // Diagonal(s) for quad
+  if(spts.length===4){
+    ctx.setLineDash([6,4]);ctx.strokeStyle='rgba(231,76,60,0.4)';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(spts[0].x,spts[0].y);ctx.lineTo(spts[2].x,spts[2].y);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(spts[1].x,spts[1].y);ctx.lineTo(spts[3].x,spts[3].y);ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Outline
+  ctx.strokeStyle='#4a90c0';ctx.lineWidth=2;ctx.setLineDash([]);
+  ctx.beginPath();ctx.moveTo(spts[0].x,spts[0].y);
+  spts.slice(1).forEach(p=>ctx.lineTo(p.x,p.y));
+  ctx.closePath();ctx.stroke();
+
+  // Points
+  const cols={P1:'#6a0000',P2:'#1a4a1a',P3:'#5a4000',P4:'#1a2a4a'};
+  spts.forEach(p=>{
+    const col=cols[p.name]||'#ccc';
+    ctx.beginPath();ctx.arc(p.x,p.y,7,0,2*Math.PI);
+    ctx.fillStyle=col;ctx.fill();
+    ctx.strokeStyle='#d0d0c0';ctx.lineWidth=2.5;ctx.stroke();
+    ctx.fillStyle=col;ctx.font=`bold 11px ${BODY_FONT}`;
+    const ox=p.x>cW/2?-22:12, oy=p.y>cH/2?-10:18;
+    ctx.fillText(p.name,p.x+ox,p.y+oy);
+  });
+
+  // North arrow
+  const ax=cW-30,ay=cH-50;
+  ctx.strokeStyle='#dce4f0';ctx.lineWidth=1.5;ctx.setLineDash([]);
+  ctx.beginPath();ctx.moveTo(ax,ay+22);ctx.lineTo(ax,ay+4);
+  ctx.lineTo(ax-5,ay+10);ctx.moveTo(ax,ay+4);ctx.lineTo(ax+5,ay+10);ctx.stroke();
+  ctx.fillStyle='#dce4f0';ctx.font='bold 11px sans-serif';
+  ctx.textAlign='center';ctx.fillText('N',ax,ay);ctx.textAlign='start';
+
+  // Scale bar
+  const barM=(Math.max(eMax-eMin,nMax-nMin)*0.35)||5;
+  const barPx=barM*sc;
+  ctx.strokeStyle='#dce4f0';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(pad,cH-18);ctx.lineTo(pad+barPx,cH-18);
+  ctx.moveTo(pad,cH-22);ctx.lineTo(pad,cH-14);
+  ctx.moveTo(pad+barPx,cH-22);ctx.lineTo(pad+barPx,cH-14);ctx.stroke();
+  ctx.fillStyle='#7a8aaa';ctx.font='10px sans-serif';
+  ctx.textAlign='center';ctx.fillText(`${barM.toFixed(1)} m`,pad+barPx/2,cH-25);
+  ctx.textAlign='start';
+}
+
+function renderExport(){
+  el('export-out').innerHTML=`
+    <p style="font-size:.82rem;color:var(--sub);margin-bottom:12px;line-height:1.6">
+      Export coordinates and metadata for use in RayStudio or GIS.
+    </p>
+    <div class="exp-row">
+      <button class="exp-btn primary" onclick="exportCSV()">💾 Export CSV</button>
+      <button class="exp-btn" onclick="exportFieldbook()">📄 Field Book (.txt)</button>
+      <button class="exp-btn" onclick="copyClip()">📋 Copy CSV</button>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════════════
+function buildCSV(){
+  const {geo,site,surveyMode:sm,trueB,magBrg,dec}=lastResult;
+  const now=new Date().toISOString().slice(0,16).replace('T',' ');
+  const lines=[
+    '# GPS Traverse Calculator — Export',
+    `# Generated: ${now}`,
+    `# Site: ${site}`,
+    `# Date: ${lastResult.surveyDate}`,
+    `# Surveyor: ${lastResult.surveyor}`,
+    `# Mode: ${sm==='tri'?'Triangle':'Quadrilateral'}`,
+    `# P1→P2 bearing: ${magBrg.toFixed(2)}°M + ${dec>=0?'+':''}${dec.toFixed(1)}° decl = ${trueB.toFixed(2)}°T`,
+    `# Elevation mode: ${{uniform:'Uniform',manual:'Manual entry',abney:'Abney/clinometer'}[lastResult.elevMode]||lastResult.elevMode}`,
+    'name,easting,northing,elevation,source',
+  ];
+  geo.pts.forEach(p=>lines.push(`${p.name},${fN(p.e)},${fN(p.n)},${fN(p.z)},${p.src}`));
+  return lines.join('\r\n');
+}
+
+function buildFieldbook(){
+  const {geo,site,surveyMode:sm,trueB,magBrg,dec,elevClosure}=lastResult;
+  const now=new Date().toISOString().slice(0,16).replace('T',' ');
+  const SEP='='.repeat(70), DASH='-'.repeat(70);
+  const lines=[SEP,'GPS TRAVERSE CALCULATOR — FIELD BOOK',SEP,
+    `Generated : ${now}`,`Site      : ${site}`,
+    `Date      : ${lastResult.surveyDate}`,
+    `Surveyor  : ${lastResult.surveyor}`,
+    `Mode      : ${sm==='tri'?'Triangle (3-point)':'Quadrilateral (4-point)'}`,
+    `Bearing   : ${magBrg.toFixed(2)}°M  +  ${dec.toFixed(1)}° decl  =  ${trueB.toFixed(2)}°T`,
+    '',DASH,'COORDINATES',DASH,
+    `${'Point'.padEnd(6)} ${'Easting'.padStart(14)} ${'Northing'.padStart(14)} ${'Elev'.padStart(10)}  Source`,DASH];
+  geo.pts.forEach(p=>lines.push(
+    `${p.name.padEnd(6)} ${fN(p.e).padStart(14)} ${fN(p.n).padStart(14)} ${fN(p.z).padStart(10)}  ${p.src}`));
+  lines.push('',DASH,'SOLVER VERIFICATION',DASH,
+    '(confirms the calculation reconstructed entered values — not an',
+    ' independent check; see INDEPENDENT FIELD CHECKS below for that)',DASH,
+    `${'Measurement'.padEnd(28)} ${'Measured'.padStart(10)} ${'Expected'.padStart(10)} ${'Diff(mm)'.padStart(10)}  Status`,DASH);
+  geo.checks.forEach(c=>{
+    if(c.info){
+      lines.push(`${c.label.padEnd(28)} ${fN(c.meas).padStart(10)}  ${'—'.padStart(10)} ${'—'.padStart(10)}  computed`);
+    } else {
+      lines.push(`${c.label.padEnd(28)} ${fN(c.meas).padStart(10)} ${fN(c.exp).padStart(10)} ${(Math.abs(c.diff)*1000).toFixed(1).padStart(10)}  ${c.qc.s}`);
+    }
+  });
+  // ── Independent field checks — genuine redundant cross-checks only ──────
+  lines.push('',DASH,'INDEPENDENT FIELD CHECKS',DASH);
+  let hadIndependentCheck=false;
+  if(sm==='quad' && geo.d24_note){
+    hadIndependentCheck=true;
+    const dn=geo.d24_note;
+    const qc=qcLabel(dn.diff_mm);
+    lines.push(`Check diagonal P2→P4 : measured ${fN(dn.measured)} m vs computed ${fN(dn.computed)} m  (${dn.diff_mm.toFixed(0)} mm)  ${qc.s}`);
+  }
+  if(elevClosure){
+    hadIndependentCheck=true;
+    const {closure_m,mm,qc}=elevClosure;
+    lines.push(`Abney elevation loop closure (Σ Δh) : ${closure_m>=0?'+':''}${closure_m.toFixed(3)} m  (${mm.toFixed(0)} mm)  ${qc.s}`);
+  }
+  if(!hadIndependentCheck) lines.push('None available for this survey.');
+  // Elevation section
+  lines.push('',DASH,'ELEVATIONS',DASH);
+  const emLabel={'uniform':'Uniform (all = P1)','manual':'Manual entry','abney':'Abney/clinometer'};
+  lines.push(`Mode: ${emLabel[lastResult.elevMode]||lastResult.elevMode}`);
+  if(lastResult.elevMode==='abney'){
+    const n2=geo.pts.length;
+    const pts2=geo.pts.map(p=>p.name);
+    const distIds2=surveyMode==='tri'?['d12','d23-tri','d31']:['d12q','d23q','d34','d41'];
+    lines.push(`${'Leg'.padEnd(10)} ${'Dir'.padStart(4)} ${'Deg'.padStart(4)} ${'Mark'.padStart(6)} ${'Min'.padStart(4)} ${'Dist(m)'.padStart(9)} ${'RDir'.padStart(5)} ${'RDeg'.padStart(5)} ${'RMark'.padStart(6)} ${'RMin'.padStart(5)} ${'Δh(m)'.padStart(8)}`);
+    lines.push('-'.repeat(80));
+    // Compact formatter: turns a vernier mark + side selection into both a
+    // human-readable "20'L"-style audit string and the resolved minutes value,
+    // without throwing — incomplete legs just print as '—' in the field book.
+    const fmtVernier=(markId,sideGroupName)=>{
+      const raw=el(markId)?.value;
+      if(raw===undefined||raw==='') return {markStr:'—',minStr:'—'};
+      const mark=parseInt(raw,10);
+      if(mark===0) return {markStr:"0′",minStr:'0'};
+      const sideEl=document.querySelector(`input[name="${sideGroupName}"]:checked`);
+      const side=sideEl?.value;
+      if(side==='right') return {markStr:`${mark}′R`,minStr:String(mark)};
+      if(side==='left')  return {markStr:`${mark}′L`,minStr:String(60-mark)};
+      return {markStr:`${mark}′?`,minStr:'—'};
+    };
+    for(let i=0;i<n2;i++){
+      const leg=`${pts2[i]}→${pts2[(i+1)%n2]}`;
+      const sgn=document.querySelector(`input[name="ab-sign-${i}"]:checked`)?.value;
+      const dir=sgn==='-1'?'DN':sgn==='1'?'UP':'—';
+      const deg=el(`ab-deg-${i}`)?.value||'—';
+      const {markStr,minStr}=fmtVernier(`ab-vmark-${i}`,`ab-vside-${i}`);
+      const dist=el(`ab-dist-${i}`)?.value||'—';
+      const rdegRaw=el(`ab-rdeg-${i}`)?.value;
+      const rdeg=rdegRaw||'';
+      const rsgn=document.querySelector(`input[name="ab-rsign-${i}"]:checked`)?.value;
+      const rdir=rdeg?(rsgn==='-1'?'DN':rsgn==='1'?'UP':'—'):'';
+      const rv=rdeg?fmtVernier(`ab-rvmark-${i}`,`ab-rvside-${i}`):{markStr:'—',minStr:'—'};
+      let dhStr='—';
+      try{
+        const ang=abneyAngle(`ab-deg-${i}`,`ab-vmark-${i}`,`ab-vside-${i}`,`ab-sign-${i}`,i+1);
+        const d=parseFloat(dist);
+        const rec=abneyAngle(`ab-rdeg-${i}`,`ab-rvmark-${i}`,`ab-rvside-${i}`,`ab-rsign-${i}`,i+1);
+        if(!isNaN(ang)&&!isNaN(d)){
+          let dh=d*Math.sin(ang*Math.PI/180);
+          if(!isNaN(rec)) dh=(dh-d*Math.sin(rec*Math.PI/180))/2;
+          dhStr=(dh>=0?'+':'')+dh.toFixed(3);
+        }
+      }catch{}
+      lines.push(`${leg.padEnd(10)} ${dir.padStart(4)} ${deg.padStart(4)} ${markStr.padStart(6)} ${minStr.padStart(4)} ${dist.padStart(9)} ${rdir.padStart(5)} ${(rdeg||'—').padStart(5)} ${rv.markStr.padStart(6)} ${rv.minStr.padStart(5)} ${dhStr.padStart(8)}`);
+    }
+    if(elevClosure){
+      lines.push('-'.repeat(80));
+      lines.push(`Loop closure (Σ Δh): ${elevClosure.closure_m>=0?'+':''}${elevClosure.closure_m.toFixed(3)} m  (${elevClosure.mm.toFixed(0)} mm)  ${elevClosure.qc.s}`);
+    }
+  }
+  lines.push('',DASH,`Perimeter: ${fN(geo.perimeter)} m   Area: ${fN(geo.area,1)} m² (${fN(geo.area/10000,4)} ha)`,SEP);
+  return lines.join('\r\n');
+}
+
+function dlFile(content,name,mime){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download=name;document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(a.href);
+}
+
+function stem(){ return (lastResult?.site||'traverse').replace(/[^\w-]/g,'_')||'traverse' }
+function exportCSV(){ if(!lastResult)return; dlFile(buildCSV(),stem()+'_coords.csv','text/csv'); toast('✔ CSV downloaded') }
+function exportFieldbook(){ if(!lastResult)return; dlFile(buildFieldbook(),stem()+'_fieldbook.txt','text/plain'); toast('✔ Field book downloaded') }
+function copyClip(){
+  if(!lastResult) return;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(buildCSV())
+      .then(()=>toast('✔ Copied to clipboard'))
+      .catch(()=>{ alert('Clipboard access denied. Use Export CSV instead.'); });
+  } else {
+    // Fallback for older browsers / non-HTTPS
+    try{
+      const ta=document.createElement('textarea');
+      ta.value=buildCSV(); ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      toast('✔ Copied to clipboard');
+    }catch{ alert('Copy not supported. Use Export CSV instead.'); }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABS & TOAST
+// ═══════════════════════════════════════════════════════════════════════════
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.panel===id));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id==='panel-'+id));
+  if(id==='plan'&&lastResult) renderPlan();
+}
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>showTab(t.dataset.panel)));
+
+let toastTimer;
+function toast(msg){
+  const e=el('toast'); e.textContent=msg; e.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>e.classList.remove('show'),2200);
+}
+
+window.addEventListener('resize',()=>{
+  if(lastResult&&el('panel-plan').classList.contains('active')) renderPlan();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+const BODY_FONT = getComputedStyle(document.body).fontFamily;
+
+// Auto-fill today's date
+(()=>{
+  const d=new Date();
+  const dd=String(d.getDate()).padStart(2,'0');
+  const mm=String(d.getMonth()+1).padStart(2,'0');
+  const yyyy=d.getFullYear();
+  const dateEl=el('survey-date');
+  if(dateEl) dateEl.value=`${dd}/${mm}/${yyyy}`;
+})();
+
+// Mark required fields visually when left empty
+function markRequired(inputEl){
+  if(!inputEl) return;
+  const empty = inputEl.value.trim()==='';
+  inputEl.classList.toggle('req-empty', empty);
+}
+// Wire to all required inputs on blur
+['e1','n1','z1','dec','brg'].forEach(id=>{
+  const inp=el(id);
+  if(!inp) return;
+  inp.addEventListener('blur', ()=>markRequired(inp));
+  inp.addEventListener('input',()=>{ if(inp.classList.contains('req-empty')) markRequired(inp); });
+});
+
+setMode('tri');
+updateLiveBearing();
+</script>
+</body>
+</html>
